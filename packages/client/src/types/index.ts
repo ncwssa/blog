@@ -43,3 +43,59 @@ export interface PaginatedData<T> {
   page: number
   pageSize: number
 }
+
+// ===== AI 模型 =====
+
+export interface AIModel {
+  id: number
+  provider: string
+  name: string
+  model_id: string
+  api_key?: string
+  base_url: string
+  is_default: number
+  is_enabled: number
+  config: Record<string, any>
+  created_at: string
+  updated_at: string
+  supportsEmbedding?: boolean
+}
+
+export interface AIModelForm {
+  provider: string
+  name: string
+  modelId: string
+  apiKey: string
+  baseUrl: string
+  isDefault: boolean
+}
+
+// ===== 语义搜索结果 =====
+
+export interface SearchResult {
+  postId: number
+  postTitle: string
+  chunkId: number
+  chunkText: string
+  chunkIndex: number
+  score: number
+}
+
+// 语义搜索响应
+export interface SearchResponse {
+  results: SearchResult[]
+  hasVectorData: boolean
+  isFallback: boolean
+}
+
+// 重建索引响应
+export interface ReindexResponse {
+  total: number
+  succeeded: number
+  failed: number
+  vectorized: number
+  chunked: number
+  errors: string[]
+  hasEmbeddingModel: boolean
+  tip?: string
+}

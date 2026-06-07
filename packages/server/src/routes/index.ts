@@ -1,6 +1,8 @@
 import Router from 'koa-router';
 import categoriesRouter from './categories';
 import postsRouter from './posts';
+import aiModelsRouter from './ai-models';
+import searchRouter from './search';
 
 const router = new Router();
 
@@ -23,5 +25,13 @@ router.use(categoriesRouter.allowedMethods());
 // 注册博客路由
 router.use(postsRouter.routes());
 router.use(postsRouter.allowedMethods());
+
+// 注册 AI 模型路由
+router.use(aiModelsRouter.routes());
+router.use(aiModelsRouter.allowedMethods());
+
+// 注册搜索路由
+router.use(searchRouter.routes());
+router.use(searchRouter.allowedMethods());
 
 export default router;

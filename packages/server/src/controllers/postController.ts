@@ -1,5 +1,6 @@
 import { Context } from 'koa';
 import * as postModel from '../models/postModel';
+import { indexPost, deletePostChunks } from '../rag/index';
 
 /**
  * 博客控制器 — 参数校验和响应格式化
@@ -80,6 +81,11 @@ export function create(ctx: Context) {
     message: '创建成功',
     data: post,
   };
+
+  // 异步触发向量索引（不阻塞响应）
+  indexPost(result.id).catch((err) =>
+    console.error('自动向量化失败:', err)
+  );
 }
 
 /** 更新博客 */
@@ -127,6 +133,13 @@ export function update(ctx: Context) {
   // 返回更新后的文章
   const post = postModel.findById(id);
   ctx.body = { code: 0, message: '更新成功', data: post };
+
+  // 如果内容变了，异步触发重新索引
+  if (updateData.content !== undefined || updateData.title !== undefined) {
+    indexPost(id).catch((err) =>
+      console.error('更新后自动向量化失败:', err)
+    );
+  }
 }
 
 /** 删除博客 */
@@ -143,4 +156,7 @@ export function remove(ctx: Context) {
 
   postModel.deletePostById(id);
   ctx.body = { code: 0, message: '删除成功', data: null };
+
+  // 清理向量索引
+  deletePostChunks(id);
 }

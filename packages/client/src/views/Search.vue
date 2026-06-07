@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { semanticSearch } from '@/api/search'
 
 const route = useRoute()
 const router = useRouter()
-
-import CategoryTag from '@/components/common/CategoryTag.vue'
 
 const query = ref('')
 const results = ref<any[]>([])
 const loading = ref(false)
 const searched = ref(false)
+const hasVectorData = ref(false)
+const isFallback = ref(false)
 
 onMounted(() => {
-  // 如果 URL 有 q 参数，自动搜索
   if (route.query.q) {
     query.value = route.query.q as string
     handleSearch()
@@ -26,12 +26,13 @@ async function handleSearch() {
   loading.value = true
   searched.value = true
   try {
-    // 简单关键词搜索通过博客列表接口实现
-    const { getPosts } = await import('@/api/posts')
-    const res = await getPosts({ keyword: query.value.trim(), pageSize: 50 })
-    results.value = res.data.list
+    const res = await semanticSearch({ query: query.value.trim(), topK: 10 })
+    results.value = res.data.results
+    hasVectorData.value = res.data.hasVectorData
+    isFallback.value = res.data.isFallback
   } catch (error) {
     console.error('搜索失败:', error)
+    results.value = []
   } finally {
     loading.value = false
   }
@@ -41,15 +42,8 @@ function goToPost(id: number) {
   router.push({ name: 'PostDetail', params: { id: String(id) } })
 }
 
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+function formatScore(score: number) {
+  return (score * 100).toFixed(1) + '%'
 }
 </script>
 
@@ -58,7 +52,7 @@ function formatDate(dateStr: string) {
     <!-- 页面标题 -->
     <div class="mb-6">
       <h1 class="text-lg font-semibold text-[#0a0a0a]">知识库搜索</h1>
-      <p class="text-sm text-gray-400 mt-1">通过关键词搜索你的知识笔记，快速找到相关内容</p>
+      <p class="text-sm text-gray-400 mt-1">通过自然语言搜索你的知识笔记，找到相关内容</p>
     </div>
 
     <!-- 搜索框 -->
@@ -73,7 +67,7 @@ function formatDate(dateStr: string) {
         <input
           v-model="query"
           type="text"
-          placeholder="输入关键词搜索文章..."
+          placeholder="输入自然语言搜索你的知识库..."
           class="w-full pl-10 pr-24 h-11 text-sm bg-gray-50 border-0 rounded-xl outline-none focus:bg-gray-100 transition-colors placeholder:text-gray-300"
           @keyup.enter="handleSearch"
         />
@@ -86,46 +80,60 @@ function formatDate(dateStr: string) {
       </div>
     </div>
 
+    <!-- 降级搜索提示 -->
+    <div v-if="isFallback && results.length > 0"
+      class="mb-4 px-4 py-3 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-yellow-700">
+      ⚡ 当前为关键词匹配模式，搜索结果可能不够精准。
+      前往 <router-link to="/settings" class="font-medium underline">设置 → AI 模型管理</router-link>
+      配置并设默认模型后重建索引，即可启用智能语义搜索。
+    </div>
+
     <!-- 加载状态 -->
     <div v-if="loading" class="flex justify-center py-20">
       <div class="text-sm text-gray-300">搜索中...</div>
     </div>
 
     <!-- 搜索结果 -->
-    <div v-else-if="results.length > 0" class="space-y-3">
-      <p class="text-sm text-gray-400 mb-3">共找到 {{ results.length }} 篇相关文章</p>
+    <div v-else-if="results.length > 0" class="space-y-4">
+      <p class="text-sm text-gray-400 mb-3">共找到 {{ results.length }} 个相关片段</p>
       <div
-        v-for="post in results"
-        :key="post.id"
+        v-for="item in results"
+        :key="item.chunkId"
         class="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-sm hover:border-gray-200 transition-all cursor-pointer"
-        @click="goToPost(post.id)"
+        @click="goToPost(item.postId)"
       >
-        <h3 class="text-base font-semibold text-[#0a0a0a] mb-2 line-clamp-1">{{ post.title }}</h3>
-        <p class="text-sm text-gray-500 mb-3 line-clamp-2 leading-relaxed">
-          {{ post.summary || post.content?.slice(0, 150) }}
-        </p>
-        <div class="flex items-center gap-3 text-xs text-gray-400">
-          <div v-if="post.categories?.length" class="flex flex-wrap gap-1">
-            <CategoryTag v-for="cat in post.categories" :key="cat.id" :category="cat" size="sm" />
-          </div>
-          <span>{{ formatDate(post.created_at) }}</span>
-          <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
-          <span>{{ post.word_count }} 字</span>
+        <!-- 匹配度 + 来源标题 -->
+        <div class="flex items-center gap-3 mb-2">
+          <span
+            class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+            :class="item.score >= 0.8 ? 'bg-green-50 text-green-600' : item.score >= 0.6 ? 'bg-yellow-50 text-yellow-600' : 'bg-gray-50 text-gray-500'"
+          >
+            {{ formatScore(item.score) }} 匹配
+          </span>
+          <span class="text-xs text-gray-400 truncate">
+            来源: {{ item.postTitle }}
+          </span>
         </div>
+
+        <!-- 匹配片段 -->
+        <p class="text-sm text-gray-600 leading-relaxed line-clamp-4">
+          {{ item.chunkText }}
+        </p>
       </div>
     </div>
 
     <!-- 无结果 -->
     <div v-else-if="searched" class="flex flex-col items-center justify-center py-20">
       <span class="text-4xl mb-4">🔍</span>
-      <p class="text-sm text-gray-400">未找到匹配的文章</p>
-      <p class="text-xs text-gray-300 mt-2">试试其他关键词</p>
+      <p class="text-sm text-gray-400">未找到匹配的内容</p>
+      <p class="text-xs text-gray-300 mt-2">试试其他关键词或更自然的描述</p>
     </div>
 
     <!-- 初始状态 -->
     <div v-else class="flex flex-col items-center justify-center py-20">
       <span class="text-4xl mb-4">📚</span>
-      <p class="text-sm text-gray-400">输入关键词开始搜索你的知识库</p>
+      <p class="text-sm text-gray-400">输入自然语言开始搜索你的知识库</p>
+      <p class="text-xs text-gray-300 mt-2">例如：Vue 3 响应式原理是什么？</p>
     </div>
   </div>
 </template>
