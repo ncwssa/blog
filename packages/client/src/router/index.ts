@@ -8,11 +8,14 @@ const routes: RouteRecordRaw[] = [
     component: AppLayout,
     children: [
       { path: '', name: 'Home', component: () => import('@/views/Home.vue') },
-      { path: 'post/:id', name: 'PostDetail', component: () => import('@/views/PostDetail.vue') },
+      { path: 'posts', name: 'PostList', component: () => import('@/views/PostList.vue') },
       { path: 'post/new', name: 'PostCreate', component: () => import('@/views/PostEdit.vue') },
       { path: 'post/edit/:id', name: 'PostEdit', component: () => import('@/views/PostEdit.vue') },
+      { path: 'post/:id', name: 'PostDetail', component: () => import('@/views/PostDetail.vue') },
       { path: 'categories', name: 'Categories', component: () => import('@/views/Categories.vue') },
+      { path: 'search', name: 'Search', component: () => import('@/views/Search.vue') },
       { path: 'ai', name: 'AIChat', component: () => import('@/views/AIChat.vue') },
+      { path: 'settings', name: 'Settings', component: () => import('@/views/Settings.vue') },
     ]
   }
 ]

@@ -1,194 +1,172 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts'
 import { useCategoriesStore } from '@/stores/categories'
-import Pagination from '@/components/common/Pagination.vue'
-import Empty from '@/components/common/Empty.vue'
+import Icon from '@/components/common/Icon.vue'
 
 const router = useRouter()
 const postsStore = usePostsStore()
 const categoriesStore = useCategoriesStore()
 
-// 搜索关键词（本地绑定，回车时触发筛选）
-const searchKeyword = ref('')
+const totalPosts = computed(() => postsStore.total)
+const totalCategories = computed(() => categoriesStore.categories.length)
+const recentPosts = computed(() => postsStore.posts.slice(0, 5))
 
-// 初始化：加载数据
-onMounted(() => {
-  postsStore.fetchPosts()
-  categoriesStore.fetchCategories()
-})
-
-// 监听筛选条件和页码变化
-watch(
-  () => [postsStore.page, postsStore.filters],
-  () => {
-    postsStore.fetchPosts()
-  },
-  { deep: true }
+const categoryStats = computed(() =>
+  [...categoriesStore.categories]
+    .map((c) => ({ name: c.name, count: c.post_count ?? 0 }))
+    .sort((a, b) => b.count - a.count)
 )
 
-// 搜索处理
-function handleSearch() {
-  postsStore.setFilter({ keyword: searchKeyword.value || undefined })
-}
+const quickActions = [
+  { label: '写文章', route: 'PostCreate', icon: 'edit' as const },
+  { label: '浏览博客', route: 'PostList', icon: 'file-text' as const },
+  { label: '搜索知识', route: 'Search', icon: 'search' as const },
+  { label: 'AI 问答', route: 'AIChat', icon: 'bot' as const },
+]
 
-// 分类筛选
-function handleCategoryFilter(event: Event) {
-  const target = event.target as HTMLSelectElement
-  const value = target.value
-  postsStore.setFilter({ categoryId: value ? Number(value) : undefined })
-}
+onMounted(async () => {
+  postsStore.pageSize = 5
+  await Promise.all([
+    postsStore.fetchPosts(),
+    categoriesStore.fetchCategories()
+  ])
+})
 
-// 翻页
-function handlePageChange(page: number) {
-  postsStore.setPage(page)
-  postsStore.fetchPosts()
-}
-
-// 跳转到文章详情
 function goToPost(id: number) {
-  router.push({ name: 'PostDetail', params: { id } })
+  router.push({ name: 'PostDetail', params: { id: String(id) } })
 }
 
-// 跳转到新建页
-function goToCreate() {
-  router.push({ name: 'PostCreate' })
+function go(name: string) {
+  router.push({ name })
 }
 
-// 格式化日期
 function formatDate(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
+  return new Date(dateStr).toLocaleDateString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit'
   })
 }
-
-// 获取摘要：content 前 100 个字符
-function getSummary(content: string) {
-  if (!content) return ''
-  return content.length > 100 ? content.slice(0, 100) + '...' : content
-}
-
-// 根据 category_id 获取分类名称
-function getCategoryName(categoryId: number | null): string {
-  if (!categoryId) return ''
-  const cat = categoriesStore.categories.find((c) => c.id === categoryId)
-  return cat ? cat.name : ''
-}
-
-import { ref } from 'vue'
 </script>
 
 <template>
   <div>
-    <!-- 顶部：标题 + 写博客按钮 -->
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">我的博客</h1>
-      <button
-        class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        @click="goToCreate"
-      >
-        + 写博客
-      </button>
+    <!-- 欢迎 -->
+    <div class="mb-6">
+      <h1 class="text-lg font-semibold text-[#0a0a0a]">仪表盘</h1>
+      <p class="text-sm text-gray-400 mt-1">知识博客系统概览</p>
     </div>
 
-    <!-- 筛选区：分类下拉 + 搜索框 -->
-    <div class="flex items-center gap-4 mb-6">
-      <!-- 分类筛选 -->
-      <select
-        class="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        @change="handleCategoryFilter"
-      >
-        <option value="">全部分类</option>
-        <option
-          v-for="cat in categoriesStore.categories"
-          :key="cat.id"
-          :value="cat.id"
-        >
-          {{ cat.name }}
-        </option>
-      </select>
+    <!-- 统计卡片 -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white rounded-2xl border border-gray-100 p-5">
+        <div class="flex items-center gap-4">
+          <div class="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-lg">📄</div>
+          <div>
+            <p class="text-xs text-gray-400 mb-0.5">文章总数</p>
+            <p class="text-2xl font-bold text-[#0a0a0a]">{{ totalPosts }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-5">
+        <div class="flex items-center gap-4">
+          <div class="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-lg">📂</div>
+          <div>
+            <p class="text-xs text-gray-400 mb-0.5">分类数量</p>
+            <p class="text-2xl font-bold text-[#0a0a0a]">{{ totalCategories }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 p-5">
+        <div class="flex items-center gap-4">
+          <div class="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-lg">🔍</div>
+          <div>
+            <p class="text-xs text-gray-400 mb-0.5">知识检索</p>
+            <button class="text-xs text-gray-500 hover:text-[#0a0a0a] font-medium" @click="go('Search')">
+              去搜索 →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
-      <!-- 搜索框 -->
-      <div class="relative flex-1 max-w-md">
-        <input
-          v-model="searchKeyword"
-          type="text"
-          placeholder="搜索文章标题..."
-          class="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          @keyup.enter="handleSearch"
-        />
+    <!-- 快捷入口 -->
+    <div class="mb-6">
+      <h2 class="text-sm font-semibold text-[#0a0a0a] mb-3">快捷操作</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <button
-          class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs text-gray-500 hover:text-blue-600 transition-colors"
-          @click="handleSearch"
+          v-for="a in quickActions"
+          :key="a.label"
+          class="flex flex-col items-center gap-2 bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-sm hover:border-gray-200 transition-all"
+          @click="go(a.route)"
         >
-          搜索
+          <Icon :name="a.icon" :size="20" class="text-gray-500" />
+          <span class="text-xs font-medium text-gray-600">{{ a.label }}</span>
         </button>
       </div>
     </div>
 
-    <!-- 加载状态 -->
-    <div v-if="postsStore.loading" class="flex justify-center py-16">
-      <div class="text-gray-400 text-sm">加载中...</div>
-    </div>
-
-    <!-- 空状态 -->
-    <Empty
-      v-else-if="postsStore.posts.length === 0"
-      message="还没有文章，快来写一篇吧！"
-      icon="📝"
-    >
-      <button
-        class="mt-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-        @click="goToCreate"
-      >
-        开始写作
-      </button>
-    </Empty>
-
-    <!-- 博客卡片列表 -->
-    <div v-else class="grid gap-4">
-      <div
-        v-for="post in postsStore.posts"
-        :key="post.id"
-        class="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow cursor-pointer"
-        @click="goToPost(post.id)"
-      >
-        <!-- 标题行 -->
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-lg font-semibold text-gray-800 hover:text-blue-600 transition-colors line-clamp-1">
-            {{ post.title }}
-          </h2>
-          <span
-            v-if="getCategoryName(post.category_id)"
-            class="px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-full whitespace-nowrap ml-3"
-          >
-            {{ getCategoryName(post.category_id) }}
-          </span>
+    <!-- 最近文章 + 分类分布 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-[#0a0a0a]">最近文章</h2>
+          <button
+            v-if="totalPosts > 0"
+            class="text-xs text-gray-500 hover:text-[#0a0a0a]"
+            @click="go('PostList')"
+          >查看全部 →</button>
         </div>
 
-        <!-- 摘要 -->
-        <p class="text-sm text-gray-600 mb-3 line-clamp-2">
-          {{ getSummary(post.content) }}
-        </p>
+        <div v-if="postsStore.loading" class="text-center py-8 text-sm text-gray-300">加载中...</div>
 
-        <!-- 元信息 -->
-        <div class="flex items-center gap-4 text-xs text-gray-400">
-          <span>{{ formatDate(post.created_at) }}</span>
-          <span>{{ post.word_count }} 字</span>
+        <div v-else-if="recentPosts.length === 0" class="text-center py-8">
+          <p class="text-sm text-gray-300 mb-3">还没有文章</p>
+          <button
+            class="px-4 py-2 bg-[#0a0a0a] text-white text-sm rounded-xl hover:opacity-90 transition-opacity"
+            @click="go('PostCreate')"
+          >开始写作</button>
+        </div>
+
+        <div v-else class="divide-y divide-gray-50">
+          <div
+            v-for="post in recentPosts"
+            :key="post.id"
+            class="flex items-center justify-between py-3 first:pt-0 last:pb-0 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+            @click="goToPost(post.id)"
+          >
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-[#0a0a0a] truncate">{{ post.title }}</p>
+              <p class="text-xs text-gray-400 mt-0.5">{{ formatDate(post.created_at) }} · {{ post.word_count }} 字</p>
+            </div>
+            <span
+              v-if="post.category_name"
+              class="ml-3 px-2 py-0.5 text-[11px] bg-gray-50 text-gray-500 rounded-md whitespace-nowrap"
+            >{{ post.category_name }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-gray-100 p-5">
+        <h2 class="text-sm font-semibold text-[#0a0a0a] mb-4">分类分布</h2>
+
+        <div v-if="categoryStats.length === 0" class="text-center py-8 text-sm text-gray-300">暂无分类</div>
+
+        <div v-else class="space-y-3">
+          <div v-for="cat in categoryStats" :key="cat.name" class="flex items-center justify-between">
+            <span class="text-sm text-gray-600">{{ cat.name }}</span>
+            <div class="flex items-center gap-2">
+              <div class="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-[#0a0a0a] rounded-full transition-all"
+                  :style="{ width: Math.min(100, (cat.count / Math.max(1, categoryStats[0].count)) * 80) + '%' }"
+                />
+              </div>
+              <span class="text-xs text-gray-400 w-4 text-right">{{ cat.count }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- 分页 -->
-    <Pagination
-      :page="postsStore.page"
-      :page-size="postsStore.pageSize"
-      :total="postsStore.total"
-      @update:page="handlePageChange"
-    />
   </div>
 </template>

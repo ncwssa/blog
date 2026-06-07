@@ -8,11 +8,21 @@
     "build": "pnpm --filter @knowledge-blog/server build && pnpm --filter @knowledge-blog/client build",
     "start": "pnpm --filter @knowledge-blog/server start"
   },
-  "keywords": ["blog", "knowledge", "rag", "ai", "vue3", "koa2"],
+  "keywords": [
+    "blog",
+    "knowledge",
+    "rag",
+    "ai",
+    "vue3",
+    "koa2"
+  ],
   "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
   }
 }

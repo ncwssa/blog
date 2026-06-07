@@ -27,7 +27,7 @@ export function getAll(ctx: Context) {
 
   const result = postModel.findAll(params);
   ctx.body = {
-    code: 200,
+    code: 0,
     message: 'success',
     data: result,
   };
@@ -43,7 +43,7 @@ export function getById(ctx: Context) {
     return;
   }
 
-  ctx.body = { code: 200, message: 'success', data: post };
+  ctx.body = { code: 0, message: 'success', data: post };
 }
 
 /** 创建博客 */
@@ -53,11 +53,13 @@ export function create(ctx: Context) {
   // 参数校验
   if (!title || !title.trim()) {
     ctx.body = { code: 400, message: '文章标题不能为空', data: null };
+    ctx.status = 400;
     return;
   }
 
   if (!content || !content.trim()) {
     ctx.body = { code: 400, message: '文章内容不能为空', data: null };
+    ctx.status = 400;
     return;
   }
 
@@ -70,7 +72,7 @@ export function create(ctx: Context) {
   // 返回创建的文章完整信息
   const post = postModel.findById(Number(result.id));
   ctx.body = {
-    code: 200,
+    code: 0,
     message: '创建成功',
     data: post,
   };
@@ -85,6 +87,7 @@ export function update(ctx: Context) {
   const existing = postModel.findById(id);
   if (!existing) {
     ctx.body = { code: 404, message: '文章不存在', data: null };
+    ctx.status = 404;
     return;
   }
 
@@ -94,6 +97,7 @@ export function update(ctx: Context) {
   if (title !== undefined) {
     if (!title.trim()) {
       ctx.body = { code: 400, message: '文章标题不能为空', data: null };
+      ctx.status = 400;
       return;
     }
     updateData.title = title.trim();
@@ -102,6 +106,7 @@ export function update(ctx: Context) {
   if (content !== undefined) {
     if (!content.trim()) {
       ctx.body = { code: 400, message: '文章内容不能为空', data: null };
+      ctx.status = 400;
       return;
     }
     updateData.content = content;
@@ -115,7 +120,7 @@ export function update(ctx: Context) {
 
   // 返回更新后的文章
   const post = postModel.findById(id);
-  ctx.body = { code: 200, message: '更新成功', data: post };
+  ctx.body = { code: 0, message: '更新成功', data: post };
 }
 
 /** 删除博客 */
@@ -126,9 +131,10 @@ export function remove(ctx: Context) {
   const existing = postModel.findById(id);
   if (!existing) {
     ctx.body = { code: 404, message: '文章不存在', data: null };
+    ctx.status = 404;
     return;
   }
 
   postModel.deletePostById(id);
-  ctx.body = { code: 200, message: '删除成功', data: null };
+  ctx.body = { code: 0, message: '删除成功', data: null };
 }

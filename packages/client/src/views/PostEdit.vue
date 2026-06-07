@@ -9,25 +9,20 @@ const router = useRouter()
 const postsStore = usePostsStore()
 const categoriesStore = useCategoriesStore()
 
-// 判断是新建还是编辑
 const isEdit = computed(() => !!route.params.id)
 const postId = computed(() => Number(route.params.id))
 
-// 表单数据
 const form = ref({
   title: '',
   content: '',
   categoryId: undefined as number | undefined
 })
 
-// 保存中状态
 const saving = ref(false)
 
-// 加载分类列表 + 编辑模式加载文章数据
 onMounted(async () => {
   try {
     await categoriesStore.fetchCategories()
-
     if (isEdit.value) {
       const post = await postsStore.fetchPost(postId.value)
       if (post) {
@@ -36,52 +31,37 @@ onMounted(async () => {
         form.value.categoryId = post.category_id ?? undefined
       }
     }
-  } catch (error) {
+  } catch {
     alert('加载数据失败')
   }
 })
 
-// 保存文章
 async function handleSave() {
-  // 验证必填字段
-  if (!form.value.title.trim()) {
-    alert('请输入文章标题')
-    return
-  }
-  if (!form.value.content.trim()) {
-    alert('请输入文章内容')
-    return
-  }
+  if (!form.value.title.trim()) { alert('请输入文章标题'); return }
+  if (!form.value.content.trim()) { alert('请输入文章内容'); return }
 
   saving.value = true
   try {
     if (isEdit.value) {
-      // 更新
       await postsStore.editPost(postId.value, {
-        title: form.value.title,
-        content: form.value.content,
+        title: form.value.title, content: form.value.content,
         categoryId: form.value.categoryId ?? null
       })
-      alert('更新成功')
       router.push({ name: 'PostDetail', params: { id: postId.value } })
     } else {
-      // 新建
       const newPost = await postsStore.addPost({
-        title: form.value.title,
-        content: form.value.content,
+        title: form.value.title, content: form.value.content,
         categoryId: form.value.categoryId
       })
-      alert('创建成功')
       router.push({ name: 'PostDetail', params: { id: newPost.id } })
     }
-  } catch (error) {
-    alert(isEdit.value ? '更新失败，请稍后重试' : '创建失败，请稍后重试')
+  } catch {
+    alert(isEdit.value ? '更新失败' : '创建失败')
   } finally {
     saving.value = false
   }
 }
 
-// 取消
 function handleCancel() {
   if (isEdit.value) {
     router.push({ name: 'PostDetail', params: { id: postId.value } })
@@ -92,70 +72,69 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="max-w-4xl">
-    <!-- 页面标题 -->
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">
-      {{ isEdit ? '编辑文章' : '新建文章' }}
-    </h1>
+  <div class="max-w-3xl mx-auto">
+    <!-- 标题 -->
+    <div class="mb-6">
+      <h1 class="text-lg font-semibold text-[#0a0a0a]">{{ isEdit ? '编辑文章' : '写文章' }}</h1>
+      <p class="text-sm text-gray-400 mt-0.5">{{ isEdit ? '修改已有文章内容' : '创建一篇新的知识文章' }}</p>
+    </div>
 
     <!-- 表单 -->
-    <div class="space-y-5">
-      <!-- 标题输入 -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-6 space-y-5">
+      <!-- 标题 -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">标题 <span class="text-red-500">*</span></label>
+        <label class="block text-sm font-medium text-[#0a0a0a] mb-1.5">标题 <span class="text-red-400">*</span></label>
         <input
           v-model="form.title"
           type="text"
-          placeholder="请输入文章标题"
-          class="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="输入文章标题..."
+          class="w-full px-4 h-10 text-sm bg-gray-50 border-0 rounded-xl outline-none focus:bg-gray-100 transition-colors placeholder:text-gray-300"
         />
       </div>
 
-      <!-- 分类选择 -->
+      <!-- 分类 -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">分类</label>
+        <label class="block text-sm font-medium text-[#0a0a0a] mb-1.5">分类</label>
         <select
           v-model="form.categoryId"
-          class="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          class="w-full px-4 h-10 text-sm bg-gray-50 border-0 rounded-xl outline-none focus:bg-gray-100 transition-colors"
         >
           <option :value="undefined">未分类</option>
-          <option
-            v-for="cat in categoriesStore.categories"
-            :key="cat.id"
-            :value="cat.id"
-          >
+          <option v-for="cat in categoriesStore.categories" :key="cat.id" :value="cat.id">
             {{ cat.name }}
           </option>
         </select>
       </div>
 
-      <!-- 内容编辑区 -->
+      <!-- 内容 -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">内容 <span class="text-red-500">*</span></label>
+        <label class="block text-sm font-medium text-[#0a0a0a] mb-1.5">内容 <span class="text-red-400">*</span></label>
         <textarea
           v-model="form.content"
-          placeholder="请输入文章内容（支持 Markdown 格式）"
+          placeholder="支持 Markdown 格式..."
           rows="18"
-          class="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y font-mono leading-relaxed"
+          class="w-full px-4 py-3 text-sm bg-gray-50 border-0 rounded-xl outline-none focus:bg-gray-100 transition-colors resize-y font-mono leading-relaxed placeholder:text-gray-300"
         ></textarea>
       </div>
 
-      <!-- 底部按钮 -->
+      <!-- 按钮 -->
       <div class="flex items-center gap-3 pt-2">
         <button
-          class="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-5 h-10 bg-[#0a0a0a] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="saving"
           @click="handleSave"
         >
+          <svg v-if="saving" class="w-4 h-4 inline animate-spin mr-1.5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+          </svg>
           {{ saving ? '保存中...' : '保存' }}
         </button>
         <button
-          class="px-5 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors"
+          class="px-5 h-10 border border-gray-200 text-gray-500 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
           :disabled="saving"
           @click="handleCancel"
-        >
-          取消
-        </button>
+        >取消</button>
       </div>
     </div>
   </div>

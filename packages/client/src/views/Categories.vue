@@ -46,10 +46,8 @@ async function handleSave() {
   try {
     if (editingId.value) {
       await categoriesStore.editCategory(editingId.value, formName.value.trim())
-      alert('更新成功')
     } else {
       await categoriesStore.addCategory(formName.value.trim())
-      alert('创建成功')
     }
     cancelForm()
   } catch (error) {
@@ -62,7 +60,6 @@ async function handleDelete(id: number, name: string) {
   if (!window.confirm(`确定要删除分类"${name}"吗？删除后该分类下的文章将变为未分类。`)) return
   try {
     await categoriesStore.removeCategory(id)
-    alert('删除成功')
   } catch (error) {
     alert('删除失败，请稍后重试')
   }
@@ -71,35 +68,41 @@ async function handleDelete(id: number, name: string) {
 
 <template>
   <div>
-    <!-- 顶部：标题 + 新建按钮 -->
+    <!-- 页面标题 -->
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">分类管理</h1>
+      <div>
+        <h1 class="text-lg font-semibold text-[#0a0a0a]">分类管理</h1>
+        <p class="text-sm text-gray-400 mt-1">管理博客文章的分类标签</p>
+      </div>
       <button
-        class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+        class="inline-flex items-center gap-2 px-4 h-9 bg-[#0a0a0a] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity"
         @click="openCreateForm"
       >
-        + 新建分类
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+        新建分类
       </button>
     </div>
 
     <!-- 内联表单 -->
-    <div v-if="showForm" class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+    <div v-if="showForm" class="bg-white rounded-2xl border border-gray-100 p-4 mb-6">
       <div class="flex items-center gap-3">
         <input
           v-model="formName"
           type="text"
           :placeholder="editingId ? '编辑分类名称' : '输入新分类名称'"
-          class="flex-1 px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          class="flex-1 px-4 h-10 text-sm bg-gray-50 border-0 rounded-xl outline-none focus:bg-gray-100 transition-colors placeholder:text-gray-300"
           @keyup.enter="handleSave"
         />
         <button
-          class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+          class="px-4 h-10 bg-[#0a0a0a] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity"
           @click="handleSave"
         >
           {{ editingId ? '更新' : '创建' }}
         </button>
         <button
-          class="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-100 transition-colors"
+          class="px-4 h-10 border border-gray-200 text-gray-500 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
           @click="cancelForm"
         >
           取消
@@ -108,8 +111,8 @@ async function handleDelete(id: number, name: string) {
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="categoriesStore.loading" class="flex justify-center py-16">
-      <div class="text-gray-400 text-sm">加载中...</div>
+    <div v-if="categoriesStore.loading" class="flex justify-center py-20">
+      <div class="text-sm text-gray-300">加载中...</div>
     </div>
 
     <!-- 空状态 -->
@@ -120,59 +123,59 @@ async function handleDelete(id: number, name: string) {
     />
 
     <!-- 分类列表 -->
-    <div v-else class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div v-else class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       <table class="w-full">
         <thead>
-          <tr class="bg-gray-50 border-b border-gray-200">
-            <th class="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">分类名称</th>
-            <th class="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
-            <th class="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">文章数</th>
-            <th class="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+          <tr class="border-b border-gray-50">
+            <th class="text-left px-5 py-3.5 text-xs font-medium text-gray-400">分类名称</th>
+            <th class="text-left px-5 py-3.5 text-xs font-medium text-gray-400">类型</th>
+            <th class="text-left px-5 py-3.5 text-xs font-medium text-gray-400">文章数</th>
+            <th class="text-right px-5 py-3.5 text-xs font-medium text-gray-400">操作</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
+        <tbody class="divide-y divide-gray-50">
           <tr
             v-for="cat in categoriesStore.categories"
             :key="cat.id"
-            class="hover:bg-gray-50 transition-colors"
+            class="hover:bg-gray-50/50 transition-colors"
           >
             <td class="px-5 py-3.5">
-              <span class="text-sm font-medium text-gray-800">{{ cat.name }}</span>
+              <span class="text-sm font-medium text-[#0a0a0a]">{{ cat.name }}</span>
             </td>
             <td class="px-5 py-3.5">
               <span
                 v-if="cat.is_preset"
-                class="px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 rounded-full"
+                class="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-500 rounded-lg"
               >
                 预设
               </span>
               <span
                 v-else
-                class="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full"
+                class="px-2 py-0.5 text-[11px] bg-gray-50 text-gray-400 rounded-lg"
               >
                 自定义
               </span>
             </td>
             <td class="px-5 py-3.5">
-              <span class="text-sm text-gray-600">{{ cat.post_count ?? 0 }}</span>
+              <span class="text-sm text-gray-500">{{ cat.post_count ?? 0 }}</span>
             </td>
             <td class="px-5 py-3.5 text-right">
-              <div class="flex items-center justify-end gap-2">
+              <div class="flex items-center justify-end gap-1">
                 <button
-                  class="px-2.5 py-1 text-xs rounded-md transition-colors"
+                  class="px-2.5 h-7 text-xs rounded-lg transition-colors"
                   :class="cat.is_preset
-                    ? 'text-gray-400 cursor-not-allowed'
-                    : 'text-blue-600 hover:bg-blue-50'"
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-500 hover:text-[#0a0a0a] hover:bg-gray-100'"
                   :disabled="!!cat.is_preset"
                   @click="openEditForm(cat.id, cat.name)"
                 >
                   编辑
                 </button>
                 <button
-                  class="px-2.5 py-1 text-xs rounded-md transition-colors"
+                  class="px-2.5 h-7 text-xs rounded-lg transition-colors"
                   :class="cat.is_preset
-                    ? 'text-gray-400 cursor-not-allowed'
-                    : 'text-red-600 hover:bg-red-50'"
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-red-400 hover:text-red-500 hover:bg-red-50'"
                   :disabled="!!cat.is_preset"
                   @click="handleDelete(cat.id, cat.name)"
                 >

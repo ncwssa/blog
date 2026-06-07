@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// 分页组件
 interface Props {
   page: number
   pageSize: number
@@ -13,27 +12,17 @@ const emit = defineEmits<{
   (e: 'update:page', page: number): void
 }>()
 
-// 计算总页数
 const totalPages = computed(() => Math.ceil(props.total / props.pageSize))
 
-// 是否可以翻页
-const canPrev = computed(() => props.page > 1)
-const canNext = computed(() => props.page < totalPages.value)
-
-// 生成页码列表（最多显示 5 个页码）
 const pageNumbers = computed(() => {
   const pages: number[] = []
   const maxVisible = 5
   let start = Math.max(1, props.page - Math.floor(maxVisible / 2))
   let end = Math.min(totalPages.value, start + maxVisible - 1)
-
   if (end - start < maxVisible - 1) {
     start = Math.max(1, end - maxVisible + 1)
   }
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i)
-  }
+  for (let i = start; i <= end; i++) pages.push(i)
   return pages
 })
 
@@ -45,47 +34,41 @@ function goToPage(p: number) {
 </script>
 
 <template>
-  <div v-if="totalPages > 1" class="flex items-center justify-center space-x-2 mt-6">
-    <!-- 上一页 -->
+  <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 mt-8">
     <button
-      :disabled="!canPrev"
-      class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
-      :class="canPrev
-        ? 'border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer'
-        : 'border-gray-200 text-gray-400 cursor-not-allowed'"
+      :disabled="page <= 1"
+      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm transition-colors disabled:text-gray-300 disabled:cursor-not-allowed text-gray-500 hover:text-[#0a0a0a] hover:bg-gray-100"
       @click="goToPage(page - 1)"
     >
-      上一页
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+      </svg>
     </button>
 
-    <!-- 页码 -->
     <button
       v-for="p in pageNumbers"
       :key="p"
-      class="w-8 h-8 text-sm rounded-lg border transition-colors"
+      class="min-w-[36px] h-9 px-2 rounded-lg text-sm font-medium transition-all"
       :class="p === page
-        ? 'bg-blue-600 text-white border-blue-600'
-        : 'border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer'"
+        ? 'bg-[#0a0a0a] text-white shadow-sm'
+        : 'text-gray-500 hover:text-[#0a0a0a] hover:bg-gray-100'"
       @click="goToPage(p)"
     >
       {{ p }}
     </button>
 
-    <!-- 下一页 -->
     <button
-      :disabled="!canNext"
-      class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
-      :class="canNext
-        ? 'border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer'
-        : 'border-gray-200 text-gray-400 cursor-not-allowed'"
+      :disabled="page >= totalPages"
+      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm transition-colors disabled:text-gray-300 disabled:cursor-not-allowed text-gray-500 hover:text-[#0a0a0a] hover:bg-gray-100"
       @click="goToPage(page + 1)"
     >
-      下一页
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
     </button>
 
-    <!-- 页码信息 -->
-    <span class="text-sm text-gray-500 ml-4">
-      共 {{ total }} 条，第 {{ page }}/{{ totalPages }} 页
+    <span class="text-xs text-gray-400 ml-3">
+      第 {{ page }}/{{ totalPages }} 页 · 共 {{ total }} 条
     </span>
   </div>
 </template>

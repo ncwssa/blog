@@ -1,38 +1,46 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import Icon from '@/components/common/Icon.vue'
 
 const route = useRoute()
 
-// 导航菜单配置
-const menuItems = [
-  { path: '/', name: '博客列表', icon: '📝' },
-  { path: '/post/new', name: '写博客', icon: '✏️' },
-  { path: '/categories', name: '分类管理', icon: '📂' },
-  { path: '/ai', name: 'AI 助手', icon: '🤖' },
+defineProps<{
+  open: boolean
+}>()
+
+const navItems = [
+  { path: '/', name: '首页', icon: 'home' as const },
+  { path: '/posts', name: '博客', icon: 'file-text' as const },
+  { path: '/post/new', name: '写文章', icon: 'edit' as const },
+  { path: '/categories', name: '分类', icon: 'folder' as const },
+  { path: '/search', name: '知识库', icon: 'search' as const },
+  { path: '/ai', name: 'AI 助手', icon: 'bot' as const },
+  { path: '/settings', name: '设置', icon: 'settings' as const },
 ]
 
-// 判断当前路由是否激活
 function isActive(path: string): boolean {
-  if (path === '/') {
-    return route.path === '/'
-  }
+  if (path === '/') return route.path === '/'
   return route.path.startsWith(path)
 }
 </script>
 
 <template>
-  <aside class="w-60 bg-gray-100 border-r border-gray-200 min-h-[calc(100vh-3.5rem)]">
-    <nav class="p-4 space-y-1">
+  <aside
+    class="fixed lg:static inset-y-0 left-0 z-30 w-48 bg-white border-r border-gray-100 flex flex-col pt-14 lg:pt-0 transition-transform duration-200 lg:translate-x-0 sidebar-scroll"
+    :class="open ? 'translate-x-0' : '-translate-x-full lg:hidden'"
+  >
+    <!-- 导航菜单 -->
+    <nav class="flex-1 pt-4 p-2 space-y-0.5 overflow-y-auto">
       <router-link
-        v-for="item in menuItems"
+        v-for="item in navItems"
         :key="item.path"
         :to="item.path"
-        class="flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+        class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all"
         :class="isActive(item.path)
-          ? 'bg-primary-50 text-primary-700'
-          : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'"
+          ? 'bg-[#0a0a0a] text-white shadow-sm'
+          : 'text-gray-500 hover:text-[#0a0a0a] hover:bg-gray-50'"
       >
-        <span class="text-lg">{{ item.icon }}</span>
+        <Icon :name="item.icon" />
         <span>{{ item.name }}</span>
       </router-link>
     </nav>

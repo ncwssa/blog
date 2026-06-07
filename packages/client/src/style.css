@@ -2,6 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========== 基础样式重置 ========== */
 body {
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-[#fafafa] text-[#0a0a0a] antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans SC', sans-serif;
+}
+
+/* ========== 滚动条美化 ========== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-200 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-300;
+}
+
+/* ========== 转场动画 ========== */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ========== Prose 排版 (Tailwind Typography 增强) ========== */
+.prose {
+  @apply max-w-none;
+}
+.prose h1 {
+  @apply text-2xl font-bold text-[#0a0a0a] mt-8 mb-4 pb-2 border-b border-gray-100;
+}
+.prose h2 {
+  @apply text-xl font-semibold text-[#0a0a0a] mt-7 mb-3;
+}
+.prose h3 {
+  @apply text-lg font-semibold text-[#0a0a0a] mt-6 mb-2;
+}
+.prose p {
+  @apply text-[15px] leading-7 text-[#333] mb-4;
+}
+.prose ul,
+.prose ol {
+  @apply pl-6 mb-4 text-[15px] leading-7 text-[#333];
+}
+.prose li {
+  @apply mb-1;
+}
+.prose ul > li {
+  list-style-type: disc;
+}
+.prose ol > li {
+  list-style-type: decimal;
+}
+.prose strong {
+  @apply font-semibold text-[#0a0a0a];
+}
+.prose code {
+  @apply px-1.5 py-0.5 bg-gray-100 rounded text-sm font-mono text-pink-600;
+}
+.prose pre {
+  @apply bg-[#0a0a0a] text-gray-100 rounded-xl p-4 mb-4 overflow-x-auto text-sm leading-6;
+}
+.prose pre code {
+  @apply bg-transparent text-gray-100 p-0;
+}
+.prose blockquote {
+  @apply border-l-4 border-gray-200 pl-4 italic text-gray-500 mb-4;
+}
+.prose a {
+  @apply text-blue-600 hover:text-blue-700 underline underline-offset-2 decoration-blue-200 hover:decoration-blue-400 transition-colors;
+}
+.prose hr {
+  @apply my-8 border-gray-100;
+}
+.prose img {
+  @apply rounded-xl my-6;
+}
+.prose table {
+  @apply w-full border-collapse mb-4;
+}
+.prose th {
+  @apply border border-gray-200 bg-gray-50 px-4 py-2 text-left text-sm font-medium;
+}
+.prose td {
+  @apply border border-gray-200 px-4 py-2 text-sm;
+}
+
+/* ========== 侧边栏滚动条 ========== */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 3px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  @apply bg-transparent rounded-full;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  @apply bg-gray-200;
 }
