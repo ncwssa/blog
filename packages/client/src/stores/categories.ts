@@ -27,10 +27,10 @@ export const useCategoriesStore = defineStore('categories', () => {
     }
   }
 
-  // 创建分类
-  async function addCategory(name: string) {
+  // 创建分类（支持颜色）
+  async function addCategory(name: string, color?: string) {
     try {
-      const res = await createCategory(name)
+      const res = await createCategory(name, color)
       await fetchCategories() // 刷新列表
       return res.data
     } catch (error) {
@@ -39,10 +39,10 @@ export const useCategoriesStore = defineStore('categories', () => {
     }
   }
 
-  // 更新分类
-  async function editCategory(id: number, name: string) {
+  // 更新分类（支持名称和颜色）
+  async function editCategory(id: number, data: { name?: string; color?: string }) {
     try {
-      const res = await updateCategory(id, name)
+      const res = await updateCategory(id, data)
       await fetchCategories() // 刷新列表
       return res.data
     } catch (error) {

@@ -18,22 +18,22 @@ export function getPost(id: number): Promise<ApiResponse<Post>> {
   return request.get(`/api/posts/${id}`)
 }
 
-// 创建博客
+// 创建博客（支持多分类）
 export function createPost(data: {
   title: string
   content: string
-  categoryId?: number
+  categoryIds?: number[]
 }): Promise<ApiResponse<Post>> {
   return request.post('/api/posts', data)
 }
 
-// 更新博客
+// 更新博客（支持多分类）
 export function updatePost(
   id: number,
   data: {
     title?: string
     content?: string
-    categoryId?: number | null
+    categoryIds?: number[]
   }
 ): Promise<ApiResponse<Post>> {
   return request.put(`/api/posts/${id}`, data)

@@ -48,7 +48,7 @@ export function getById(ctx: Context) {
 
 /** 创建博客 */
 export function create(ctx: Context) {
-  const { title, content, categoryId } = ctx.request.body as any;
+  const { title, content, categoryIds } = ctx.request.body as any;
 
   // 参数校验
   if (!title || !title.trim()) {
@@ -66,7 +66,11 @@ export function create(ctx: Context) {
   const result = postModel.create({
     title: title.trim(),
     content,
-    categoryId: categoryId ? Number(categoryId) : undefined,
+    categoryIds: categoryIds
+      ? (Array.isArray(categoryIds) ? categoryIds : [categoryIds])
+          .map(Number)
+          .filter((id: number) => !isNaN(id) && id > 0)
+      : undefined,
   });
 
   // 返回创建的文章完整信息
@@ -81,7 +85,7 @@ export function create(ctx: Context) {
 /** 更新博客 */
 export function update(ctx: Context) {
   const id = Number(ctx.params.id);
-  const { title, content, categoryId } = ctx.request.body as any;
+  const { title, content, categoryIds } = ctx.request.body as any;
 
   // 检查文章是否存在
   const existing = postModel.findById(id);
@@ -92,7 +96,7 @@ export function update(ctx: Context) {
   }
 
   // 构建更新数据
-  const updateData: { title?: string; content?: string; categoryId?: number } = {};
+  const updateData: { title?: string; content?: string; categoryIds?: number[] } = {};
 
   if (title !== undefined) {
     if (!title.trim()) {
@@ -112,8 +116,10 @@ export function update(ctx: Context) {
     updateData.content = content;
   }
 
-  if (categoryId !== undefined) {
-    updateData.categoryId = categoryId ? Number(categoryId) : 0;
+  if (categoryIds !== undefined) {
+    updateData.categoryIds = (Array.isArray(categoryIds) ? categoryIds : [categoryIds])
+      .map(Number)
+      .filter((id: number) => !isNaN(id) && id > 0);
   }
 
   postModel.update(id, updateData);

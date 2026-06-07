@@ -48,8 +48,8 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  // 创建博客
-  async function addPost(data: { title: string; content: string; categoryId?: number }) {
+  // 创建博客（支持多分类）
+  async function addPost(data: { title: string; content: string; categoryIds?: number[] }) {
     try {
       const res = await createPost(data)
       return res.data
@@ -59,10 +59,10 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  // 更新博客
+  // 更新博客（支持多分类）
   async function editPost(
     id: number,
-    data: { title?: string; content?: string; categoryId?: number | null }
+    data: { title?: string; content?: string; categoryIds?: number[] }
   ) {
     try {
       const res = await updatePost(id, data)

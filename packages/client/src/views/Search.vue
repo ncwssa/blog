@@ -5,6 +5,8 @@ import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 
+import CategoryTag from '@/components/common/CategoryTag.vue'
+
 const query = ref('')
 const results = ref<any[]>([])
 const loading = ref(false)
@@ -41,10 +43,12 @@ function goToPost(id: number) {
 
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
-    day: '2-digit'
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
   })
 }
 </script>
@@ -101,6 +105,9 @@ function formatDate(dateStr: string) {
           {{ post.summary || post.content?.slice(0, 150) }}
         </p>
         <div class="flex items-center gap-3 text-xs text-gray-400">
+          <div v-if="post.categories?.length" class="flex flex-wrap gap-1">
+            <CategoryTag v-for="cat in post.categories" :key="cat.id" :category="cat" size="sm" />
+          </div>
           <span>{{ formatDate(post.created_at) }}</span>
           <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
           <span>{{ post.word_count }} 字</span>

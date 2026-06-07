@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts'
 import { useCategoriesStore } from '@/stores/categories'
 import Icon from '@/components/common/Icon.vue'
+import CategoryTag from '@/components/common/CategoryTag.vue'
 
 const router = useRouter()
 const postsStore = usePostsStore()
@@ -15,7 +16,7 @@ const recentPosts = computed(() => postsStore.posts.slice(0, 5))
 
 const categoryStats = computed(() =>
   [...categoriesStore.categories]
-    .map((c) => ({ name: c.name, count: c.post_count ?? 0 }))
+    .map((c) => ({ name: c.name, color: c.color, count: c.post_count ?? 0 }))
     .sort((a, b) => b.count - a.count)
 )
 
@@ -43,8 +44,9 @@ function go(name: string) {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit'
+  return new Date(dateStr).toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
   })
 }
 </script>
@@ -139,10 +141,9 @@ function formatDate(dateStr: string) {
               <p class="text-sm font-medium text-[#0a0a0a] truncate">{{ post.title }}</p>
               <p class="text-xs text-gray-400 mt-0.5">{{ formatDate(post.created_at) }} · {{ post.word_count }} 字</p>
             </div>
-            <span
-              v-if="post.category_name"
-              class="ml-3 px-2 py-0.5 text-[11px] bg-gray-50 text-gray-500 rounded-md whitespace-nowrap"
-            >{{ post.category_name }}</span>
+            <div v-if="post.categories?.length" class="ml-3 flex flex-wrap gap-1">
+              <CategoryTag v-for="cat in post.categories" :key="cat.id" :category="cat" size="sm" />
+            </div>
           </div>
         </div>
       </div>
@@ -154,12 +155,21 @@ function formatDate(dateStr: string) {
 
         <div v-else class="space-y-3">
           <div v-for="cat in categoryStats" :key="cat.name" class="flex items-center justify-between">
-            <span class="text-sm text-gray-600">{{ cat.name }}</span>
+            <div class="flex items-center gap-2">
+              <span
+                class="w-2.5 h-2.5 rounded-full"
+                :style="{ backgroundColor: cat.color || '#d1d5db' }"
+              />
+              <span class="text-sm text-gray-600">{{ cat.name }}</span>
+            </div>
             <div class="flex items-center gap-2">
               <div class="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  class="h-full bg-[#0a0a0a] rounded-full transition-all"
-                  :style="{ width: Math.min(100, (cat.count / Math.max(1, categoryStats[0].count)) * 80) + '%' }"
+                  class="h-full rounded-full transition-all"
+                  :style="{
+                    width: Math.min(100, (cat.count / Math.max(1, categoryStats[0].count)) * 80) + '%',
+                    backgroundColor: cat.color || '#0a0a0a'
+                  }"
                 />
               </div>
               <span class="text-xs text-gray-400 w-4 text-right">{{ cat.count }}</span>

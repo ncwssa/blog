@@ -5,6 +5,7 @@ import { usePostsStore } from '@/stores/posts'
 import { useCategoriesStore } from '@/stores/categories'
 import Pagination from '@/components/common/Pagination.vue'
 import Empty from '@/components/common/Empty.vue'
+import CategoryTag from '@/components/common/CategoryTag.vue'
 
 const router = useRouter()
 const postsStore = usePostsStore()
@@ -46,8 +47,9 @@ function goToCreate() {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit'
+  return new Date(dateStr).toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
   })
 }
 
@@ -135,10 +137,14 @@ function getSummary(content: string) {
               <span>{{ post.word_count }} 字</span>
             </div>
           </div>
-          <span
-            v-if="post.category_name"
-            class="shrink-0 px-2.5 py-1 text-[11px] bg-gray-50 text-gray-500 rounded-lg whitespace-nowrap"
-          >{{ post.category_name }}</span>
+          <div v-if="post.categories?.length" class="shrink-0 flex flex-wrap gap-1">
+            <CategoryTag
+              v-for="cat in post.categories"
+              :key="cat.id"
+              :category="cat"
+              size="sm"
+            />
+          </div>
         </div>
       </div>
     </div>

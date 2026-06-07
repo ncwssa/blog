@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   name: 'home' | 'file-text' | 'edit' | 'folder' | 'search' | 'bot' | 'settings' | 'plus' | 'chevron-left' | 'trash'
   size?: number
 }>(), {

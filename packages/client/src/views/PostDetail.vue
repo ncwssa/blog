@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts'
 import { useCategoriesStore } from '@/stores/categories'
+import { useToast } from '@/composables/useToast'
+import CategoryTag from '@/components/common/CategoryTag.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,11 +15,8 @@ const categoriesStore = useCategoriesStore()
 const postId = computed(() => Number(route.params.id))
 const post = computed(() => postsStore.currentPost)
 
-const categoryName = computed(() => {
-  if (!post.value?.category_id) return ''
-  const cat = categoriesStore.categories.find((c) => c.id === post.value!.category_id)
-  return cat ? cat.name : ''
-})
+const toast = useToast()
+const showDeleteConfirm = ref(false)
 
 onMounted(async () => {
   try {
@@ -40,13 +40,17 @@ function formatDate(dateStr: string) {
 function goBack() { router.push({ name: 'Home' }) }
 function goToEdit() { router.push({ name: 'PostEdit', params: { id: postId.value } }) }
 
-async function handleDelete() {
-  if (!window.confirm('确定要删除这篇文章吗？此操作不可撤销。')) return
+function handleDelete() {
+  showDeleteConfirm.value = true
+}
+
+async function confirmDelete() {
+  showDeleteConfirm.value = false
   try {
     await postsStore.removePost(postId.value)
     router.push({ name: 'Home' })
   } catch {
-    alert('删除失败')
+    toast.error('删除失败')
   }
 }
 
@@ -78,6 +82,16 @@ function renderMarkdown(content: string): string {
 
 <template>
   <div>
+    <!-- 确认删除弹窗 -->
+    <ConfirmDialog
+      v-model:show="showDeleteConfirm"
+      title="删除文章"
+      message="确定要删除这篇文章吗？此操作不可撤销。"
+      confirm-text="删除"
+      :danger="true"
+      @confirm="confirmDelete"
+    />
+
     <!-- 加载 -->
     <div v-if="postsStore.loading" class="flex justify-center py-20">
       <div class="text-sm text-gray-300">加载中...</div>
@@ -122,7 +136,9 @@ function renderMarkdown(content: string): string {
       <div class="mb-8">
         <h1 class="text-2xl font-bold text-[#0a0a0a] leading-tight mb-3">{{ post.title }}</h1>
         <div class="flex flex-wrap items-center gap-3 text-sm text-gray-400">
-          <span v-if="categoryName" class="px-2.5 py-0.5 bg-gray-50 text-gray-500 rounded-lg text-xs">{{ categoryName }}</span>
+          <div v-if="post.categories?.length" class="flex flex-wrap gap-1.5">
+            <CategoryTag v-for="cat in post.categories" :key="cat.id" :category="cat" />
+          </div>
           <span>{{ formatDate(post.created_at) }}</span>
           <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
           <span>{{ post.word_count }} 字</span>

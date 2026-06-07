@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useCategoriesStore } from '@/stores/categories'
+import { useToast } from '@/composables/useToast'
+import { generateDistinctColor } from '@/utils/colors'
 import Empty from '@/components/common/Empty.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const categoriesStore = useCategoriesStore()
 
@@ -9,6 +12,12 @@ const categoriesStore = useCategoriesStore()
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
 const formName = ref('')
+
+const toast = useToast()
+
+// 删除确认
+const showDeleteConfirm = ref(false)
+const deleteTarget = ref<{ id: number; name: string } | null>(null)
 
 // 加载分类列表
 onMounted(() => {
@@ -39,29 +48,39 @@ function cancelForm() {
 // 保存分类（新建或编辑）
 async function handleSave() {
   if (!formName.value.trim()) {
-    alert('请输入分类名称')
+    toast.warning('请输入分类名称')
     return
   }
 
   try {
     if (editingId.value) {
-      await categoriesStore.editCategory(editingId.value, formName.value.trim())
+      await categoriesStore.editCategory(editingId.value, { name: formName.value.trim() })
     } else {
-      await categoriesStore.addCategory(formName.value.trim())
+      const existingColors = categoriesStore.categories.map((c) => c.color)
+      const color = generateDistinctColor(existingColors)
+      await categoriesStore.addCategory(formName.value.trim(), color)
     }
     cancelForm()
   } catch (error) {
-    alert(editingId.value ? '更新失败，请稍后重试' : '创建失败，请稍后重试')
+    toast.error(editingId.value ? '更新失败，请稍后重试' : '创建失败，请稍后重试')
   }
 }
 
 // 删除分类
-async function handleDelete(id: number, name: string) {
-  if (!window.confirm(`确定要删除分类"${name}"吗？删除后该分类下的文章将变为未分类。`)) return
+function handleDelete(id: number, name: string) {
+  deleteTarget.value = { id, name }
+  showDeleteConfirm.value = true
+}
+
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  const { id } = deleteTarget.value
+  showDeleteConfirm.value = false
+  deleteTarget.value = null
   try {
     await categoriesStore.removeCategory(id)
   } catch (error) {
-    alert('删除失败，请稍后重试')
+    toast.error('删除失败，请稍后重试')
   }
 }
 </script>
@@ -110,6 +129,16 @@ async function handleDelete(id: number, name: string) {
       </div>
     </div>
 
+    <!-- 确认删除弹窗 -->
+    <ConfirmDialog
+      v-model:show="showDeleteConfirm"
+      title="删除分类"
+      :message="`确定要删除分类&quot;${deleteTarget?.name || ''}&quot;吗？删除后该分类下的文章将变为未分类。`"
+      confirm-text="删除"
+      :danger="true"
+      @confirm="confirmDelete"
+    />
+
     <!-- 加载状态 -->
     <div v-if="categoriesStore.loading" class="flex justify-center py-20">
       <div class="text-sm text-gray-300">加载中...</div>
@@ -140,7 +169,13 @@ async function handleDelete(id: number, name: string) {
             class="hover:bg-gray-50/50 transition-colors"
           >
             <td class="px-5 py-3.5">
-              <span class="text-sm font-medium text-[#0a0a0a]">{{ cat.name }}</span>
+              <div class="flex items-center gap-2">
+                <span
+                  class="w-2.5 h-2.5 rounded-full shrink-0"
+                  :style="{ backgroundColor: cat.color || '#d1d5db' }"
+                />
+                <span class="text-sm font-medium text-[#0a0a0a]">{{ cat.name }}</span>
+              </div>
             </td>
             <td class="px-5 py-3.5">
               <span

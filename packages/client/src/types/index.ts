@@ -1,10 +1,16 @@
+// 分类信息片段（嵌入在文章中的）
+export interface CategoryInfo {
+  id: number
+  name: string
+  color: string | null
+}
+
 // 博客文章类型
 export interface Post {
   id: number
   title: string
   content: string
-  category_id: number | null
-  category_name?: string
+  categories: CategoryInfo[]
   summary: string | null
   word_count: number
   is_vectorized: number
@@ -16,6 +22,7 @@ export interface Post {
 export interface Category {
   id: number
   name: string
+  color: string | null
   is_preset: number
   post_count?: number
   created_at: string

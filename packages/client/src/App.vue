@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// 根组件，渲染路由视图
+import Toast from '@/components/common/Toast.vue'
 </script>
 
 <template>
   <router-view />
+  <Toast />
 </template>

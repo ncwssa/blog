@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts'
 import { useCategoriesStore } from '@/stores/categories'
+import { useToast } from '@/composables/useToast'
+import CategoryPicker from '@/components/common/CategoryPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,9 +17,10 @@ const postId = computed(() => Number(route.params.id))
 const form = ref({
   title: '',
   content: '',
-  categoryId: undefined as number | undefined
+  categoryIds: [] as number[]
 })
 
+const toast = useToast()
 const saving = ref(false)
 
 onMounted(async () => {
@@ -28,35 +31,37 @@ onMounted(async () => {
       if (post) {
         form.value.title = post.title
         form.value.content = post.content
-        form.value.categoryId = post.category_id ?? undefined
+        form.value.categoryIds = post.categories.map((c) => c.id)
       }
     }
   } catch {
-    alert('加载数据失败')
+    toast.error('加载数据失败')
   }
 })
 
 async function handleSave() {
-  if (!form.value.title.trim()) { alert('请输入文章标题'); return }
-  if (!form.value.content.trim()) { alert('请输入文章内容'); return }
+  if (!form.value.title.trim()) { toast.warning('请输入文章标题'); return }
+  if (!form.value.content.trim()) { toast.warning('请输入文章内容'); return }
 
   saving.value = true
   try {
     if (isEdit.value) {
       await postsStore.editPost(postId.value, {
-        title: form.value.title, content: form.value.content,
-        categoryId: form.value.categoryId ?? null
+        title: form.value.title,
+        content: form.value.content,
+        categoryIds: form.value.categoryIds
       })
       router.push({ name: 'PostDetail', params: { id: postId.value } })
     } else {
       const newPost = await postsStore.addPost({
-        title: form.value.title, content: form.value.content,
-        categoryId: form.value.categoryId
+        title: form.value.title,
+        content: form.value.content,
+        categoryIds: form.value.categoryIds
       })
       router.push({ name: 'PostDetail', params: { id: newPost.id } })
     }
   } catch {
-    alert(isEdit.value ? '更新失败' : '创建失败')
+    toast.error(isEdit.value ? '更新失败' : '创建失败')
   } finally {
     saving.value = false
   }
@@ -92,18 +97,10 @@ function handleCancel() {
         />
       </div>
 
-      <!-- 分类 -->
+      <!-- 分类（多选 + 新建） -->
       <div>
         <label class="block text-sm font-medium text-[#0a0a0a] mb-1.5">分类</label>
-        <select
-          v-model="form.categoryId"
-          class="w-full px-4 h-10 text-sm bg-gray-50 border-0 rounded-xl outline-none focus:bg-gray-100 transition-colors"
-        >
-          <option :value="undefined">未分类</option>
-          <option v-for="cat in categoriesStore.categories" :key="cat.id" :value="cat.id">
-            {{ cat.name }}
-          </option>
-        </select>
+        <CategoryPicker v-model="form.categoryIds" />
       </div>
 
       <!-- 内容 -->
