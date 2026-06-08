@@ -1,6 +1,6 @@
 /**
  * 向量检索模块
- * 计算余弦相似度，从 post_chunks 中检索最相关的文本块
+ * 通过 sqlite-vec 的 vec0 虚拟表进行 KNN 向量搜索
  */
 import { getDatabase } from '../database';
 
@@ -21,27 +21,22 @@ export interface SearchOptions {
 }
 
 /**
- * 计算两个向量的余弦相似度
+ * 将 number[] 补零到指定维度，返回 Float32Array
+ * sqlite-vec 的 vec0 表要求同一表内所有向量维度一致
+ * OpenAI text-embedding-3-small: 1536 维
+ * 智谱 embedding-2: 1024 维 → 补零到 1536
+ * 通义千问 text-embedding-v2: 1536 维
  */
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+export function padToDim(vec: number[], dim: number): Float32Array {
+  const result = new Float32Array(dim);
+  for (let i = 0; i < Math.min(vec.length, dim); i++) {
+    result[i] = vec[i];
   }
-
-  if (normA === 0 || normB === 0) return 0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  return result;
 }
 
 /**
- * 语义检索：根据查询向量找到最相似的文本块
+ * 语义检索：通过 vec0 的 MATCH 进行 KNN 搜索
  * @param queryEmbedding 查询向量
  * @param options 检索选项
  * @returns 排序后的检索结果
@@ -53,47 +48,38 @@ export function searchSimilarChunks(
   const { topK = 5, threshold = 0.0 } = options;
   const db = getDatabase();
 
-  // 查询所有有向量的文本块
-  const chunks = db
+  const queryFloat = padToDim(queryEmbedding, 1536);
+
+  // vec0 的 distance 是余弦距离（0=完全相同，2=完全相反）
+  // 映射到 [0, 1] 相似度: score = (2 - distance) / 2
+  // 用 k 限制返回数，threshold 在 JS 层对 score 过滤（更直观）
+  const rows = db
     .prepare(
-      `SELECT pc.id, pc.post_id, pc.chunk_index, pc.chunk_text, pc.embedding,
+      `SELECT vc.chunk_id, vc.distance,
+              pc.post_id, pc.chunk_index, pc.chunk_text,
               p.title AS post_title
-       FROM post_chunks pc
+       FROM vec_chunks vc
+       JOIN post_chunks pc ON pc.id = vc.chunk_id
        JOIN posts p ON p.id = pc.post_id
-       WHERE pc.embedding IS NOT NULL AND pc.embedding != ''
-       ORDER BY pc.id ASC`
+       WHERE vc.embedding MATCH ?
+         AND k = ?
+       ORDER BY vc.distance`
     )
-    .all() as any[];
+    .all(queryFloat, topK * 3) as any[];
 
-  if (chunks.length === 0) return [];
-
-  // 计算每个块与查询向量的相似度
-  const scored: Array<{ chunk: any; score: number }> = [];
-
-  for (const chunk of chunks) {
-    try {
-      const embedding: number[] = JSON.parse(chunk.embedding);
-      const score = cosineSimilarity(queryEmbedding, embedding);
-      if (score >= threshold) {
-        scored.push({ chunk, score });
-      }
-    } catch {
-      // 跳过解析失败的向量
-    }
-  }
-
-  // 按相似度降序排序，取 Top-K
-  scored.sort((a, b) => b.score - a.score);
-  const topResults = scored.slice(0, topK);
-
-  return topResults.map((item) => ({
-    postId: item.chunk.post_id,
-    postTitle: item.chunk.post_title,
-    chunkId: item.chunk.id,
-    chunkText: item.chunk.chunk_text,
-    chunkIndex: item.chunk.chunk_index,
-    score: item.score,
-  }));
+  // 在 JS 层计算 score 并应用阈值过滤
+  // threshold: 0=显示全部, 0.5=显示 50%+ 的匹配
+  return rows
+    .map((row) => ({
+      postId: row.post_id,
+      postTitle: row.post_title,
+      chunkId: row.chunk_id,
+      chunkText: row.chunk_text,
+      chunkIndex: row.chunk_index,
+      score: Math.max(0, (2 - row.distance) / 2),
+    }))
+    .filter(r => r.score >= threshold)
+    .slice(0, topK);
 }
 
 /**
@@ -102,8 +88,8 @@ export function searchSimilarChunks(
 export function hasVectorData(): boolean {
   const db = getDatabase();
   const row = db
-    .prepare('SELECT COUNT(*) AS cnt FROM post_chunks WHERE embedding IS NOT NULL AND embedding != ?')
-    .get('') as any;
+    .prepare("SELECT COUNT(*) AS cnt FROM vec_chunks")
+    .get() as any;
   return row.cnt > 0;
 }
 
@@ -112,11 +98,13 @@ export function hasVectorData(): boolean {
  */
 export function getVectorStats(): { totalChunks: number; vectorizedPosts: number } {
   const db = getDatabase();
-  const chunks = db.prepare('SELECT COUNT(*) AS cnt FROM post_chunks').get() as any;
+  const chunks = db.prepare("SELECT COUNT(*) AS cnt FROM vec_chunks").get() as any;
   const posts = db
     .prepare(
-      'SELECT COUNT(DISTINCT post_id) AS cnt FROM post_chunks WHERE embedding IS NOT NULL AND embedding != ?'
+      `SELECT COUNT(DISTINCT pc.post_id) AS cnt
+       FROM vec_chunks vc
+       JOIN post_chunks pc ON pc.id = vc.chunk_id`
     )
-    .get('') as any;
+    .get() as any;
   return { totalChunks: chunks.cnt, vectorizedPosts: posts.cnt };
 }

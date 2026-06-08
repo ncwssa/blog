@@ -65,6 +65,38 @@ CREATE TABLE IF NOT EXISTS post_categories (
 );
 `;
 
+/** vec0 向量表：存储文本块的 Embedding 向量 */
+export const CREATE_VEC_CHUNKS_TABLE = `
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+  chunk_id INTEGER PRIMARY KEY,
+  embedding float[1536]
+);
+`;
+
+/** 对话表 */
+export const CREATE_CONVERSATIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS conversations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL DEFAULT '新对话',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
+/** 消息表 */
+export const CREATE_MESSAGES_TABLE = `
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id INTEGER NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  citations TEXT DEFAULT '[]',
+  tokens_used INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+`;
+
 /** 所有建表语句集合 */
 export const ALL_SCHEMAS = [
   CREATE_AI_MODELS_TABLE,
@@ -72,4 +104,7 @@ export const ALL_SCHEMAS = [
   CREATE_CATEGORIES_TABLE,
   CREATE_POSTS_TABLE,
   CREATE_POST_CATEGORIES_TABLE,
+  CREATE_VEC_CHUNKS_TABLE,
+  CREATE_CONVERSATIONS_TABLE,
+  CREATE_MESSAGES_TABLE,
 ];

@@ -99,3 +99,42 @@ export interface ReindexResponse {
   hasEmbeddingModel: boolean
   tip?: string
 }
+
+// ===== AI 对话 =====
+
+export interface Conversation {
+  id: number
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Citation {
+  title: string
+  postId: number
+}
+
+export interface Message {
+  id: number
+  conversation_id: number
+  role: 'user' | 'assistant'
+  content: string
+  citations: Citation[]
+  tokens_used: number
+  created_at: string
+}
+
+export interface ChatStreamData {
+  content: string
+  done: boolean
+  citations?: Citation[]
+  tokensUsed?: number
+  error?: string
+}
+
+export interface SummarizeResponse {
+  postId: number
+  postTitle: string
+  summary: string
+  tokensUsed: { prompt: number; completion: number; total: number }
+}

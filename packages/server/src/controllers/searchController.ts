@@ -1,4 +1,5 @@
 import { Context } from 'koa';
+import { getDatabase } from '../database';
 import { semanticSearch, reindexAll, indexPost } from '../rag/index';
 import { getEnabledModels } from '../rag/embedding';
 import { supportsEmbedding } from '../ai/factory';
@@ -8,8 +9,29 @@ export async function search(ctx: Context) {
   const { query, topK = 5, threshold = 0.0 } = ctx.request.body as any;
 
   if (!query || !query.trim()) {
-    ctx.body = { code: 400, message: '搜索关键词不能为空', data: null };
-    ctx.status = 400;
+    // 无关键词时返回所有文章列表
+    const db = getDatabase();
+    const posts = db
+      .prepare(
+        `SELECT id AS postId, title AS postTitle, content, created_at
+         FROM posts ORDER BY created_at DESC LIMIT ?`
+      )
+      .all(topK) as any[];
+
+    const results = posts.map((p: any) => ({
+      postId: p.postId,
+      postTitle: p.postTitle,
+      chunkId: 0,
+      chunkText: (p.content || '').slice(0, 300),
+      chunkIndex: 0,
+      score: 0,
+    }));
+
+    ctx.body = {
+      code: 0,
+      message: 'success',
+      data: { results, hasVectorData: false, isFallback: false },
+    };
     return;
   }
 

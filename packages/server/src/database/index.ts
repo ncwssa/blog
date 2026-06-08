@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import path from 'path';
 import fs from 'fs';
 import { ALL_SCHEMAS } from './schema';
@@ -53,6 +54,15 @@ export function initDatabase(): void {
 
   // 连接数据库
   db = new Database(DB_PATH);
+
+  // 加载 sqlite-vec 向量搜索扩展
+  try {
+    sqliteVec.load(db);
+    console.log('✅ 向量扩展 sqlite-vec 已加载');
+  } catch (err: any) {
+    console.error('⚠️ 向量扩展 sqlite-vec 加载失败:', err.message);
+    console.error('   语义搜索将降级为关键词匹配');
+  }
 
   // 开启 WAL 模式，提升并发性能
   db.pragma('journal_mode = WAL');

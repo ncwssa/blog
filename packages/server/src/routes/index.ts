@@ -3,6 +3,7 @@ import categoriesRouter from './categories';
 import postsRouter from './posts';
 import aiModelsRouter from './ai-models';
 import searchRouter from './search';
+import aiRouter from './ai';
 
 const router = new Router();
 
@@ -33,5 +34,9 @@ router.use(aiModelsRouter.allowedMethods());
 // 注册搜索路由
 router.use(searchRouter.routes());
 router.use(searchRouter.allowedMethods());
+
+// 注册 AI 路由
+router.use(aiRouter.routes());
+router.use(aiRouter.allowedMethods());
 
 export default router;

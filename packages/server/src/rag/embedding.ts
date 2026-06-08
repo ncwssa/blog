@@ -38,6 +38,35 @@ function getAvailableProvider(): LLMProvider | null {
 }
 
 /**
+ * 获取可用的 AI Provider（用于 Chat 对话）
+ * 遍历所有已启用模型，取第一个（不要求 Embedding 支持）
+ */
+export function getChatProvider(): LLMProvider | null {
+  const db = getDatabase();
+
+  // 获取所有已启用模型，默认优先
+  const models = db
+    .prepare(
+      `SELECT * FROM ai_models
+       WHERE is_enabled = 1
+       ORDER BY is_default DESC, id ASC`
+    )
+    .all() as any[];
+
+  if (models.length === 0) return null;
+
+  const usableModel = models[0];
+  const config = {
+    ...JSON.parse(usableModel.config || '{}'),
+    apiKey: usableModel.api_key,
+    baseUrl: usableModel.base_url,
+    model: usableModel.model_id,
+  };
+
+  return createLLMProvider(usableModel.provider as any, config);
+}
+
+/**
  * 获取已启用模型列表（用于前端选择）
  */
 export function getEnabledModels(): any[] {

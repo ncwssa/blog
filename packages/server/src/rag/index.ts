@@ -5,10 +5,13 @@
 import { getDatabase } from '../database';
 import { splitText, estimateTokens } from './chunker';
 import { generateEmbedding, generateEmbeddings } from './embedding';
-import { searchSimilarChunks } from './retriever';
+import { searchSimilarChunks, padToDim, hasVectorData } from './retriever';
 import type { SearchResult, SearchOptions } from './retriever';
 
-/** 索引一篇博客：分块 + 生成 Embedding + 存储 */
+/** vec0 固定维度（1536 覆盖 OpenAI/通义千问，智谱 1024 补零） */
+const VEC_DIM = 1536;
+
+/** 索引一篇博客：分块 + 生成 Embedding + 存储到 vec0 */
 export async function indexPost(postId: number): Promise<{
   success: boolean;
   chunks: number;
@@ -22,7 +25,8 @@ export async function indexPost(postId: number): Promise<{
     return { success: false, chunks: 0, vectorized: false, error: '文章不存在' };
   }
 
-  // 1. 清空旧的分块
+  // 1. 清空旧的分块和向量
+  db.prepare('DELETE FROM vec_chunks WHERE chunk_id IN (SELECT id FROM post_chunks WHERE post_id = ?)').run(postId);
   db.prepare('DELETE FROM post_chunks WHERE post_id = ?').run(postId);
 
   // 2. 文本分块
@@ -44,16 +48,28 @@ export async function indexPost(postId: number): Promise<{
     embedError = error.message || 'Embedding 生成失败';
   }
 
-  // 4. 存储分块（和向量）
+  // 4. 存储分块到 post_chunks，向量到 vec_chunks
   const insertChunk = db.prepare(
     'INSERT INTO post_chunks (post_id, chunk_index, chunk_text, embedding, token_count) VALUES (?, ?, ?, ?, ?)'
+  );
+  const insertVec = db.prepare(
+    'INSERT INTO vec_chunks (chunk_id, embedding) VALUES (CAST(? AS INTEGER), ?)'
   );
 
   const insertMany = db.transaction(() => {
     for (let i = 0; i < chunks.length; i++) {
       const embedding = embeddings?.[i] ? JSON.stringify(embeddings[i]) : null;
       const tokens = estimateTokens(chunks[i]);
-      insertChunk.run(postId, i, chunks[i], embedding, tokens);
+
+      // 先插入 post_chunks，获取 chunk_id
+      const info = insertChunk.run(postId, i, chunks[i], embedding, tokens);
+      const chunkId = Number(info.lastInsertRowid);
+
+      // 如果有向量，插入 vec_chunks
+      if (embeddings?.[i]) {
+        const padded = padToDim(embeddings[i], VEC_DIM);
+        insertVec.run(chunkId, padded);
+      }
     }
   });
 
@@ -67,11 +83,15 @@ export async function indexPost(postId: number): Promise<{
   return { success: true, chunks: chunks.length, vectorized, error: embedError };
 }
 
-/** 删除一篇博客的所有分块 */
+/** 删除一篇博客的所有分块和向量 */
 export function deletePostChunks(postId: number): void {
   const db = getDatabase();
-  db.prepare('DELETE FROM post_chunks WHERE post_id = ?').run(postId);
-  db.prepare('UPDATE posts SET is_vectorized = 0 WHERE id = ?').run(postId);
+  db.transaction(() => {
+    // vec0 无 ON DELETE CASCADE，需手动先删向量
+    db.prepare('DELETE FROM vec_chunks WHERE chunk_id IN (SELECT id FROM post_chunks WHERE post_id = ?)').run(postId);
+    db.prepare('DELETE FROM post_chunks WHERE post_id = ?').run(postId);
+    db.prepare('UPDATE posts SET is_vectorized = 0 WHERE id = ?').run(postId);
+  })();
   console.log(`[RAG] 分块已删除: postId=${postId}`);
 }
 
@@ -129,15 +149,10 @@ export async function semanticSearch(
   const db = getDatabase();
   const { topK = 10, threshold = 0.0 } = options;
 
-  // 1. 检查是否有向量数据
-  const vectorCount = db
-    .prepare("SELECT COUNT(*) AS cnt FROM post_chunks WHERE embedding IS NOT NULL AND embedding != ''")
-    .get() as any;
-
-  const hasVectors = vectorCount.cnt > 0;
+  const hasVectors = hasVectorData();
 
   if (hasVectors) {
-    // 2. 有向量数据：语义搜索
+    // 2. 有向量数据：通过 vec0 语义搜索
     const queryEmbedding = await generateEmbedding(query);
     if (queryEmbedding) {
       const results = searchSimilarChunks(queryEmbedding, options);
@@ -146,9 +161,11 @@ export async function semanticSearch(
     // 能生成向量但检索失败，继续降级
   }
 
-  // 3. 无向量数据（或向量生成失败）：降级为文本关键词搜索
+  // 3. 无向量数据（或向量生成失败）：降级为文本+分类名关键词搜索
   const keyword = `%${query}%`;
-  const rows = db
+
+  // 3a. 搜 chunk 内容
+  const chunkRows = db
     .prepare(
       `SELECT pc.id, pc.post_id, pc.chunk_index, pc.chunk_text,
               p.title AS post_title
@@ -160,31 +177,70 @@ export async function semanticSearch(
     )
     .all(keyword, topK) as any[];
 
-  const results: SearchResult[] = rows.map((row: any) => ({
+  const seenPostIds = new Set<number>();
+  for (const row of chunkRows) {
+    seenPostIds.add(row.post_id);
+  }
+
+  const results: SearchResult[] = chunkRows.map((row: any) => ({
     postId: row.post_id,
     postTitle: row.post_title,
     chunkId: row.id,
     chunkText: row.chunk_text,
     chunkIndex: row.chunk_index,
-    score: 0.5, // 文本搜索无相似度评分，给默认中间值
+    score: 0.5,
   }));
 
-  // 如果 chunks 表也空（从未索引过），回退到标题搜索
-  if (results.length === 0) {
-    const postRows = db
+  // 3b. 搜标题（排除已出现的文章）
+  if (results.length < topK) {
+    const titleRows = db
       .prepare(
-        `SELECT id, title, content FROM posts WHERE title LIKE ? ORDER BY created_at DESC LIMIT ?`
+        `SELECT id, title, content FROM posts
+         WHERE title LIKE ?
+           AND id NOT IN (${[...seenPostIds].map(() => '?').join(',') || '0'})
+         ORDER BY created_at DESC
+         LIMIT ?`
       )
-      .all(keyword, topK) as any[];
+      .all(keyword, ...seenPostIds, topK - results.length) as any[];
 
-    for (const row of postRows) {
+    for (const row of titleRows) {
+      seenPostIds.add(row.id);
       results.push({
         postId: row.id,
         postTitle: row.title,
         chunkId: 0,
         chunkText: (row.content || '').slice(0, 200),
         chunkIndex: 0,
-        score: 0.3,
+        score: 0.4,
+      });
+    }
+  }
+
+  // 3c. 搜分类名（排除已出现的文章）
+  if (results.length < topK) {
+    const excludeIds = [...seenPostIds];
+    const placeholders = excludeIds.map(() => '?').join(',') || '0';
+    const catRows = db
+      .prepare(
+        `SELECT p.id AS post_id, p.title, p.content,
+                c.name AS category_name
+         FROM posts p
+         JOIN post_categories pc ON pc.post_id = p.id
+         JOIN categories c ON c.id = pc.category_id
+         WHERE c.name LIKE ?
+           AND p.id NOT IN (${placeholders})
+         LIMIT ?`
+      )
+      .all(keyword, ...excludeIds, topK - results.length) as any[];
+
+    for (const row of catRows) {
+      results.push({
+        postId: row.post_id,
+        postTitle: row.title,
+        chunkId: 0,
+        chunkText: (row.content || '').slice(0, 200),
+        chunkIndex: 0,
+        score: 0.35,
       });
     }
   }

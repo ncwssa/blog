@@ -14,16 +14,33 @@ const hasVectorData = ref(false)
 const isFallback = ref(false)
 
 onMounted(() => {
+  // 首次加载自动获取所有文章
+  loadAll()
   if (route.query.q) {
     query.value = route.query.q as string
     handleSearch()
   }
 })
 
-async function handleSearch() {
-  if (!query.value.trim()) return
-
+async function loadAll() {
   loading.value = true
+  try {
+    const res = await semanticSearch({ query: '', topK: 20 })
+    results.value = res.data.results
+    hasVectorData.value = res.data.hasVectorData
+    isFallback.value = res.data.isFallback
+  } catch (error) {
+    console.error('加载失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleSearch() {
+  if (!query.value.trim()) {
+    loadAll()
+    return
+  }
   searched.value = true
   try {
     const res = await semanticSearch({ query: query.value.trim(), topK: 10 })
