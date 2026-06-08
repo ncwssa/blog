@@ -1,1528 +1,1087 @@
-# 个人本地知识总结博客系统 — 技术开发文档
-
-## 1. 技术架构概览
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      客户端 (Browser)                     │
-│         Vue 3 + Vite + Tailwind CSS + Vue Router         │
-│              Pinia 状态管理 + Markdown 编辑器              │
-└────────────────────────┬────────────────────────────────┘
-                         │ HTTP REST API
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                   后端服务 (Koa2 + TS)                    │
-│  ┌───────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│  │ 路由层     │  │ 中间件层  │  │ 控制器层              │  │
-│  └───────────┘  └──────────┘  └──────────────────────┘  │
-│  ┌───────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│  │ 服务层     │  │ AI 适配层 │  │ RAG 引擎             │  │
-│  └───────────┘  └──────────┘  └──────────────────────┘  │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    数据层 (SQLite)                        │
-│         业务数据表 + sqlite-vss 向量索引表                 │
-└─────────────────────────────────────────────────────────┘
-```
-
-**架构特点：**
-
-- **前后端分离**：前端 SPA 通过 RESTful API 与后端通信
-- **Monorepo 单仓库**：使用 pnpm workspace 管理前后端代码
-- **全栈 TypeScript**：前后端共享类型定义，提高开发效率
-- **轻量级存储**：SQLite 单文件数据库，零配置，便于本地部署与迁移
-- **AI 多厂商适配**：适配器模式统一接口，灵活切换 AI 服务商
-
----
-
-## 2. 项目目录结构
-
-```
-blog/
-├── docs/                          # 项目文档
-│   └── DEVELOPMENT.md             # 技术开发文档
-├── packages/
-│   ├── client/                    # 前端项目
-│   │   ├── public/                # 静态资源
-│   │   ├── src/
-│   │   │   ├── api/               # API 请求封装
-│   │   │   │   ├── index.ts       # Axios 实例与拦截器
-│   │   │   │   ├── posts.ts       # 博客相关接口
-│   │   │   │   ├── categories.ts  # 分类相关接口
-│   │   │   │   ├── ai.ts          # AI 相关接口
-│   │   │   │   └── search.ts      # 搜索相关接口
-│   │   │   ├── assets/            # 样式、图片等资源
-│   │   │   ├── components/        # 通用组件
-│   │   │   │   ├── common/        # 基础 UI 组件
-│   │   │   │   ├── editor/        # Markdown 编辑器组件
-│   │   │   │   ├── post/          # 文章相关组件
-│   │   │   │   └── ai/            # AI 功能组件
-│   │   │   ├── composables/       # 组合式函数 (hooks)
-│   │   │   ├── layouts/           # 页面布局
-│   │   │   ├── pages/             # 页面视图
-│   │   │   │   ├── Home.vue       # 首页
-│   │   │   │   ├── PostList.vue   # 文章列表
-│   │   │   │   ├── PostDetail.vue # 文章详情
-│   │   │   │   ├── PostEdit.vue   # 文章编辑
-│   │   │   │   ├── Search.vue     # 搜索页
-│   │   │   │   ├── AIChat.vue     # AI 问答
-│   │   │   │   └── Settings.vue   # 设置页
-│   │   │   ├── router/            # 路由配置
-│   │   │   │   └── index.ts
-│   │   │   ├── stores/            # Pinia 状态管理
-│   │   │   │   ├── post.ts        # 文章状态
-│   │   │   │   ├── category.ts    # 分类状态
-│   │   │   │   ├── ai.ts          # AI 配置状态
-│   │   │   │   └── app.ts         # 全局应用状态
-│   │   │   ├── types/             # 前端类型定义
-│   │   │   ├── utils/             # 工具函数
-│   │   │   ├── App.vue            # 根组件
-│   │   │   └── main.ts            # 入口文件
-│   │   ├── index.html
-│   │   ├── vite.config.ts
-│   │   ├── tailwind.config.ts
-│   │   ├── tsconfig.json
-│   │   └── package.json
-│   ├── server/                    # 后端项目
-│   │   ├── src/
-│   │   │   ├── config/            # 配置文件
-│   │   │   │   ├── index.ts       # 统一配置导出
-│   │   │   │   └── database.ts    # 数据库配置
-│   │   │   ├── controllers/       # 控制器层
-│   │   │   │   ├── post.ts
-│   │   │   │   ├── category.ts
-│   │   │   │   ├── ai.ts
-│   │   │   │   ├── search.ts
-│   │   │   │   └── migrate.ts
-│   │   │   ├── services/          # 服务层（业务逻辑）
-│   │   │   │   ├── post.ts
-│   │   │   │   ├── category.ts
-│   │   │   │   ├── ai.ts
-│   │   │   │   ├── rag.ts
-│   │   │   │   └── migrate.ts
-│   │   │   ├── ai/                # AI 模块
-│   │   │   │   ├── providers/     # 各厂商适配器
-│   │   │   │   │   ├── openai.ts
-│   │   │   │   │   ├── zhipu.ts
-│   │   │   │   │   ├── qwen.ts
-│   │   │   │   │   └── deepseek.ts
-│   │   │   │   ├── types.ts       # AI 接口类型定义
-│   │   │   │   └── factory.ts     # 适配器工厂
-│   │   │   ├── rag/               # RAG 模块
-│   │   │   │   ├── chunker.ts     # 文本分块
-│   │   │   │   ├── embedding.ts   # 向量生成
-│   │   │   │   ├── retriever.ts   # 向量检索
-│   │   │   │   └── index.ts       # RAG 流程编排
-│   │   │   ├── database/          # 数据库层
-│   │   │   │   ├── index.ts       # 数据库初始化
-│   │   │   │   ├── migrations/    # 数据库迁移脚本
-│   │   │   │   └── schema.sql     # 建表 SQL
-│   │   │   ├── middlewares/       # Koa 中间件
-│   │   │   │   ├── errorHandler.ts
-│   │   │   │   ├── logger.ts
-│   │   │   │   └── cors.ts
-│   │   │   ├── routes/            # 路由定义
-│   │   │   │   └── index.ts
-│   │   │   ├── types/             # 后端类型定义
-│   │   │   ├── utils/             # 工具函数
-│   │   │   └── app.ts             # 应用入口
-│   │   ├── data/                  # SQLite 数据库文件目录
-│   │   ├── tsconfig.json
-│   │   └── package.json
-│   └── shared/                    # 前后端共享类型/工具
-│       ├── src/
-│       │   ├── types/             # 共享类型定义
-│       │   │   ├── post.ts
-│       │   │   ├── category.ts
-│       │   │   ├── ai.ts
-│       │   │   └── api.ts         # API 通用响应类型
-│       │   └── index.ts
-│       ├── tsconfig.json
-│       └── package.json
-├── pnpm-workspace.yaml            # pnpm workspace 配置
-├── package.json                   # 根 package.json
-├── tsconfig.base.json             # 基础 TS 配置
-├── .gitignore
-└── .prettierrc
-```
-
----
-
-## 3. 技术栈详细说明
-
-### 前端
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Vue 3 | ^3.4 | 前端框架，使用 Composition API |
-| Vite | ^5.x | 构建工具，开发服务器 |
-| TypeScript | ^5.4 | 类型安全 |
-| Tailwind CSS | ^3.4 | 原子化 CSS 框架 |
-| Vue Router | ^4.3 | 前端路由 |
-| Pinia | ^2.1 | 状态管理 |
-| Vditor | ^3.10 | Markdown 编辑器 |
-| Axios | ^1.7 | HTTP 客户端 |
-
-### 后端
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Koa2 | ^2.15 | Web 框架 |
-| TypeScript | ^5.4 | 类型安全 |
-| better-sqlite3 | ^11.x | SQLite 驱动（同步，高性能） |
-| sqlite-vss | ^0.1 | SQLite 向量搜索扩展 |
-| koa-router | ^12.x | 路由中间件 |
-| koa-bodyparser | ^4.4 | 请求体解析 |
-| @koa/cors | ^5.x | 跨域中间件 |
-| tsx | ^4.x | TS 直接执行（开发模式） |
-| tsup | ^8.x | TS 构建打包 |
-
-### 工具链
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| pnpm | ^9.x | 包管理器 + workspace |
-| Node.js | ^20.x | 运行时 |
-| Prettier | ^3.x | 代码格式化 |
-| ESLint | ^9.x | 代码检查 |
-
----
-
-## 4. 数据库设计
-
-### 4.1 业务表结构
-
-#### posts（文章表）
-
-```sql
-CREATE TABLE posts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,                    -- 文章标题
-  content TEXT NOT NULL,                  -- Markdown 原始内容
-  summary TEXT DEFAULT '',                -- 文章摘要（AI 生成或手动）
-  category_id INTEGER,                    -- 分类 ID
-  tags TEXT DEFAULT '[]',                 -- 标签（JSON 数组）
-  is_published INTEGER DEFAULT 1,         -- 是否发布：1=已发布, 0=草稿
-  word_count INTEGER DEFAULT 0,           -- 字数统计
-  created_at TEXT DEFAULT (datetime('now', 'localtime')),
-  updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-);
-```
-
-#### categories（分类表）
-
-```sql
-CREATE TABLE categories (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE,              -- 分类名称
-  description TEXT DEFAULT '',            -- 分类描述
-  sort_order INTEGER DEFAULT 0,          -- 排序权重
-  created_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-```
-
-#### ai_models（AI 模型配置表）
-
-```sql
-CREATE TABLE ai_models (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider TEXT NOT NULL,                 -- 厂商标识: openai/zhipu/qwen/deepseek
-  name TEXT NOT NULL,                     -- 模型显示名称
-  model_id TEXT NOT NULL,                 -- 模型 ID (如 gpt-4o, glm-4)
-  api_key TEXT NOT NULL,                  -- API Key（加密存储）
-  base_url TEXT DEFAULT '',               -- 自定义 API 地址
-  is_default INTEGER DEFAULT 0,           -- 是否为默认模型
-  is_enabled INTEGER DEFAULT 1,          -- 是否启用
-  config TEXT DEFAULT '{}',               -- 额外配置（JSON: temperature 等）
-  created_at TEXT DEFAULT (datetime('now', 'localtime')),
-  updated_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-```
-
-#### settings（系统设置表）
-
-```sql
-CREATE TABLE settings (
-  key TEXT PRIMARY KEY,                   -- 设置键名
-  value TEXT NOT NULL,                    -- 设置值（JSON 格式）
-  description TEXT DEFAULT '',            -- 设置说明
-  updated_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-```
-
-#### conversations（对话表）
-
-```sql
-CREATE TABLE conversations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL DEFAULT '新对话',       -- 对话标题（取首次提问的摘要）
-  model_id INTEGER,                       -- 使用的模型
-  created_at TEXT DEFAULT (datetime('now', 'localtime')),
-  updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-  FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE SET NULL
-);
-```
-
-#### messages（对话消息表）
-
-```sql
-CREATE TABLE messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  conversation_id INTEGER NOT NULL,        -- 关联对话 ID
-  role TEXT NOT NULL,                      -- 角色: user/assistant/system
-  content TEXT NOT NULL,                   -- 消息内容
-  references_json TEXT DEFAULT '[]',       -- 引用来源（JSON数组：[{postId, postTitle, chunkText, score}]）
-  tokens_used INTEGER DEFAULT 0,           -- token 消耗
-  created_at TEXT DEFAULT (datetime('now', 'localtime')),
-  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-```
-
-### 4.2 向量表结构（sqlite-vss）
-
-```sql
--- 文本块表：存储分块后的文本
-CREATE TABLE post_chunks (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  post_id INTEGER NOT NULL,               -- 关联文章 ID
-  chunk_index INTEGER NOT NULL,           -- 块序号
-  chunk_text TEXT NOT NULL,               -- 块文本内容
-  token_count INTEGER DEFAULT 0,          -- token 数
-  created_at TEXT DEFAULT (datetime('now', 'localtime')),
-  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
-);
-
--- 向量虚拟表：存储 embedding 向量
--- sqlite-vss 使用虚拟表实现向量索引
-CREATE VIRTUAL TABLE vss_post_chunks USING vss0(
-  embedding(1536)                         -- 向量维度（对应 embedding 模型输出维度）
-);
-```
-
-> **说明：** `vss_post_chunks` 的 rowid 与 `post_chunks.id` 一一对应，通过 rowid 关联查询原始文本。
-
-### 4.3 索引设计
-
-```sql
--- 文章表索引
-CREATE INDEX idx_posts_category ON posts(category_id);
-CREATE INDEX idx_posts_created ON posts(created_at DESC);
-CREATE INDEX idx_posts_published ON posts(is_published);
-
--- 文本块索引
-CREATE INDEX idx_chunks_post ON post_chunks(post_id);
-
--- 对话历史索引
-CREATE INDEX idx_conversations_updated ON conversations(updated_at DESC);
-CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at);
-```
-
----
-
-## 5. RESTful API 接口设计
-
-### 5.1 通用响应格式
-
-```typescript
-// 成功响应
-interface ApiResponse<T> {
-  code: number;       // 状态码: 0=成功
-  data: T;            // 响应数据
-  message: string;    // 提示信息
-}
-
-// 分页响应
-interface PaginatedResponse<T> {
-  code: number;
-  data: {
-    list: T[];
-    total: number;
-    page: number;
-    pageSize: number;
-  };
-  message: string;
-}
-
-// 错误响应
-interface ErrorResponse {
-  code: number;       // 错误码: 非0
-  data: null;
-  message: string;    // 错误描述
-}
-```
-
-### 5.2 博客 CRUD 接口
-
-#### GET /api/posts — 获取文章列表
-
-```
-Query 参数:
-  page: number        (默认 1)
-  pageSize: number    (默认 20)
-  categoryId?: number
-  keyword?: string
-  isPublished?: 0 | 1
-
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "list": [
-      {
-        "id": 1,
-        "title": "Vue 3 组合式 API 入门",
-        "summary": "本文介绍 Vue 3 Composition API 的核心概念...",
-        "categoryId": 2,
-        "tags": ["Vue", "前端"],
-        "isPublished": 1,
-        "wordCount": 3200,
-        "createdAt": "2024-03-15T10:30:00",
-        "updatedAt": "2024-03-15T10:30:00"
-      }
-    ],
-    "total": 42,
-    "page": 1,
-    "pageSize": 20
-  },
-  "message": "ok"
-}
-```
-
-#### GET /api/posts/:id — 获取文章详情
-
-```
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "id": 1,
-    "title": "Vue 3 组合式 API 入门",
-    "content": "# Vue 3 组合式 API\n\n## 什么是 Composition API...",
-    "summary": "本文介绍...",
-    "categoryId": 2,
-    "tags": ["Vue", "前端"],
-    "isPublished": 1,
-    "wordCount": 3200,
-    "createdAt": "2024-03-15T10:30:00",
-    "updatedAt": "2024-03-15T10:30:00"
-  },
-  "message": "ok"
-}
-```
-
-#### POST /api/posts — 创建文章
-
-```
-请求体:
-{
-  "title": "新文章标题",
-  "content": "# Markdown 内容...",
-  "categoryId": 2,
-  "tags": ["TypeScript"],
-  "isPublished": 1
-}
-
-响应示例:
-{
-  "code": 0,
-  "data": { "id": 43 },
-  "message": "创建成功"
-}
-```
-
-#### PUT /api/posts/:id — 更新文章
-
-```
-请求体:
-{
-  "title": "更新后的标题",
-  "content": "# 更新后的内容...",
-  "categoryId": 3,
-  "tags": ["TypeScript", "Node.js"],
-  "isPublished": 1
-}
-
-响应示例:
-{
-  "code": 0,
-  "data": null,
-  "message": "更新成功"
-}
-```
-
-#### DELETE /api/posts/:id — 删除文章
-
-```
-响应示例:
-{
-  "code": 0,
-  "data": null,
-  "message": "删除成功"
-}
-```
-
-### 5.3 分类接口
-
-#### GET /api/categories — 获取所有分类
-
-```
-响应示例:
-{
-  "code": 0,
-  "data": [
-    { "id": 1, "name": "前端", "description": "前端技术笔记", "sortOrder": 1, "postCount": 15 },
-    { "id": 2, "name": "后端", "description": "后端技术笔记", "sortOrder": 2, "postCount": 8 }
-  ],
-  "message": "ok"
-}
-```
-
-#### POST /api/categories — 创建分类
-
-```
-请求体:
-{ "name": "数据库", "description": "数据库相关知识", "sortOrder": 3 }
-
-响应示例:
-{ "code": 0, "data": { "id": 4 }, "message": "创建成功" }
-```
-
-#### PUT /api/categories/:id — 更新分类
-
-```
-请求体:
-{ "name": "数据库技术", "description": "SQL/NoSQL 相关", "sortOrder": 3 }
-
-响应示例:
-{ "code": 0, "data": null, "message": "更新成功" }
-```
-
-#### DELETE /api/categories/:id — 删除分类
-
-```
-响应示例:
-{ "code": 0, "data": null, "message": "删除成功" }
-```
-
-### 5.4 AI 模型管理接口
-
-#### GET /api/ai-models — 获取所有 AI 模型配置
-
-```
-响应示例:
-{
-  "code": 0,
-  "data": [
-    {
-      "id": 1,
-      "provider": "openai",
-      "name": "GPT-4o",
-      "modelId": "gpt-4o",
-      "baseUrl": "https://api.openai.com/v1",
-      "isDefault": 1,
-      "isEnabled": 1,
-      "config": { "temperature": 0.7, "maxTokens": 4096 }
-    },
-    {
-      "id": 2,
-      "provider": "deepseek",
-      "name": "DeepSeek Chat",
-      "modelId": "deepseek-chat",
-      "baseUrl": "https://api.deepseek.com",
-      "isDefault": 0,
-      "isEnabled": 1,
-      "config": { "temperature": 0.7 }
-    }
-  ],
-  "message": "ok"
-}
-```
-
-#### POST /api/ai-models — 添加 AI 模型
-
-```
-请求体:
-{
-  "provider": "zhipu",
-  "name": "GLM-4",
-  "modelId": "glm-4",
-  "apiKey": "your-api-key-here",
-  "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
-  "isDefault": 0,
-  "config": { "temperature": 0.7 }
-}
-
-响应示例:
-{ "code": 0, "data": { "id": 3 }, "message": "创建成功" }
-```
-
-#### PUT /api/ai-models/:id — 更新 AI 模型配置
-
-```
-请求体:
-{
-  "name": "GLM-4 Plus",
-  "apiKey": "new-api-key",
-  "isDefault": 1,
-  "config": { "temperature": 0.5 }
-}
-
-响应示例:
-{ "code": 0, "data": null, "message": "更新成功" }
-```
-
-#### DELETE /api/ai-models/:id — 删除 AI 模型
-
-```
-响应示例:
-{ "code": 0, "data": null, "message": "删除成功" }
-```
-
-### 5.5 AI 智能助手接口
-
-#### POST /api/ai/chat — 知识问答（带 RAG 检索）
-
-```
-请求体:
-{
-  "question": "帮我解释一下 Vue 3 的 ref 和 reactive 有什么区别？",
-  "conversationId": 1,         // 可选，不传则创建新对话
-  "modelId": 1                 // 可选，不传使用默认模型
-}
-
-响应（流式 SSE）:
-event: references
-data: {"references": [{"postId": 1, "postTitle": "Vue 3 响应式系统详解", "chunkText": "ref 用于包装基本类型...", "score": 0.92}]}
-
-event: message
-data: {"content": "ref", "done": false}
-
-event: message
-data: {"content": " 和 reactive", "done": false}
-
-event: message
-data: {"content": "", "done": true, "conversationId": 1, "messageId": 15, "tokensUsed": 520}
-```
-
-**流程说明：**
-1. 接收用户问题，将问题向量化（Embedding）
-2. 在向量数据库中语义检索 Top-K 相关片段
-3. 先通过 SSE 返回引用来源（references 事件）
-4. 构造 Prompt（系统提示 + 检索上下文 + 对话历史 + 用户问题）
-5. 调用大模型流式输出，通过 SSE 实时推送到前端
-6. 完成后将问答持久化到 messages 表
-
-#### POST /api/ai/summarize — 博客总结
-
-```
-请求体:
-{
-  "postIds": [1, 2, 3],         // 要总结的博客 ID 数组
-  "modelId": 1,                 // 可选，不传使用默认模型
-  "type": "summary"             // summary=摘要 | keypoints=关键点 | outline=大纲
-}
-
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "result": "本文主要介绍了 Vue 3 组合式 API 的核心概念...",
-    "tokensUsed": 350,
-    "model": "gpt-4o"
-  },
-  "message": "ok"
-}
-```
-
-#### GET /api/ai/conversations — 获取对话历史列表
-
-```
-Query 参数:
-  page: number        (默认 1)
-  pageSize: number    (默认 20)
-
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "list": [
-      {
-        "id": 1,
-        "title": "Vue 3 响应式原理讨论",
-        "messageCount": 6,
-        "createdAt": "2024-03-15T10:30:00",
-        "updatedAt": "2024-03-15T11:20:00"
-      }
-    ],
-    "total": 15,
-    "page": 1,
-    "pageSize": 20
-  },
-  "message": "ok"
-}
-```
-
-#### GET /api/ai/conversations/:id — 获取对话详情
-
-```
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "id": 1,
-    "title": "Vue 3 响应式原理讨论",
-    "messages": [
-      {
-        "id": 1,
-        "role": "user",
-        "content": "Vue 3 的响应式原理是什么？",
-        "createdAt": "2024-03-15T10:30:00"
-      },
-      {
-        "id": 2,
-        "role": "assistant",
-        "content": "Vue 3 使用 Proxy 实现响应式系统...",
-        "references": [
-          {"postId": 1, "postTitle": "Vue 3 响应式系统详解", "chunkText": "...", "score": 0.92}
-        ],
-        "tokensUsed": 350,
-        "createdAt": "2024-03-15T10:30:05"
-      }
-    ],
-    "createdAt": "2024-03-15T10:30:00",
-    "updatedAt": "2024-03-15T11:20:00"
-  },
-  "message": "ok"
-}
-```
-
-#### DELETE /api/ai/conversations/:id — 删除对话
-
-```
-响应示例:
-{ "code": 0, "data": null, "message": "删除成功" }
-```
-
-### 5.6 RAG 搜索接口
-
-#### POST /api/search — 语义搜索
-
-```
-请求体:
-{
-  "query": "Vue 响应式原理是什么",
-  "topK": 5,              // 返回前 K 个最相关结果
-  "threshold": 0.7        // 相似度阈值
-}
-
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "results": [
-      {
-        "postId": 1,
-        "postTitle": "Vue 3 响应式系统详解",
-        "chunkText": "Vue 3 使用 Proxy 实现响应式，相比 Vue 2 的 defineProperty...",
-        "score": 0.92
-      },
-      {
-        "postId": 5,
-        "postTitle": "前端框架对比",
-        "chunkText": "在响应式方面，Vue 采用了细粒度的依赖追踪...",
-        "score": 0.85
-      }
-    ],
-    "total": 2
-  },
-  "message": "ok"
-}
-```
-
-#### POST /api/search/reindex — 重建向量索引
-
-```
-请求体:
-{
-  "postIds": [1, 2, 3]     // 可选，不传则全量重建
-}
-
-响应示例:
-{
-  "code": 0,
-  "data": { "indexed": 3, "chunks": 45 },
-  "message": "索引重建完成"
-}
-```
-
-### 5.7 数据迁移接口
-
-#### GET /api/migrate/export — 导出数据
-
-```
-Query 参数:
-  format: "json" | "sqlite"   (默认 json)
-
-响应:
-- format=json: 返回 JSON 文件下载
-  {
-    "version": "1.0.0",
-    "exportedAt": "2024-03-15T10:30:00",
-    "data": {
-      "posts": [...],
-      "categories": [...],
-      "settings": [...],
-      "aiModels": [...]      // apiKey 不导出
-    }
-  }
-- format=sqlite: 返回 SQLite 数据库文件下载
-```
-
-#### POST /api/migrate/import — 导入数据
-
-```
-请求体 (multipart/form-data):
-  file: 上传的 JSON 或 SQLite 文件
-  strategy: "merge" | "overwrite"   (合并/覆盖)
-
-响应示例:
-{
-  "code": 0,
-  "data": {
-    "imported": { "posts": 42, "categories": 5, "settings": 8 }
-  },
-  "message": "导入成功"
-}
-```
-
----
-
-## 6. AI 模块设计
-
-### 6.1 适配器模式架构
-
-```typescript
-// packages/server/src/ai/types.ts
-
-/** 聊天消息 */
-interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-/** LLM 配置 */
-interface LLMConfig {
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-}
-
-/** 统一 LLM Provider 接口 */
-interface LLMProvider {
-  /** 普通对话（非流式） */
-  chat(messages: ChatMessage[], config?: Partial<LLMConfig>): Promise<ChatResult>;
-
-  /** 流式对话 */
-  chatStream(messages: ChatMessage[], config?: Partial<LLMConfig>): AsyncGenerator<StreamChunk>;
-
-  /** 生成 Embedding 向量 */
-  embedding(text: string): Promise<number[]>;
-
-  /** 批量生成 Embedding */
-  embeddingBatch(texts: string[]): Promise<number[][]>;
-}
-
-/** 对话结果 */
-interface ChatResult {
-  content: string;
-  tokensUsed: {
-    prompt: number;
-    completion: number;
-    total: number;
-  };
-}
-
-/** 流式数据块 */
-interface StreamChunk {
-  content: string;
-  done: boolean;
-  tokensUsed?: number;
-}
-```
-
-### 6.2 各厂商实现
-
-```typescript
-// packages/server/src/ai/providers/openai.ts
-import type { LLMProvider, ChatMessage, LLMConfig, ChatResult, StreamChunk } from '../types';
-
-export class OpenAIProvider implements LLMProvider {
-  private config: LLMConfig;
-
-  constructor(config: LLMConfig) {
-    this.config = config;
-  }
-
-  async chat(messages: ChatMessage[]): Promise<ChatResult> {
-    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages,
-        temperature: this.config.temperature ?? 0.7,
-        max_tokens: this.config.maxTokens ?? 4096,
-      }),
-    });
-
-    const data = await response.json();
-    return {
-      content: data.choices[0].message.content,
-      tokensUsed: {
-        prompt: data.usage.prompt_tokens,
-        completion: data.usage.completion_tokens,
-        total: data.usage.total_tokens,
-      },
-    };
-  }
-
-  async *chatStream(messages: ChatMessage[]): AsyncGenerator<StreamChunk> {
-    // 流式实现，使用 SSE 读取
-    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages,
-        stream: true,
-      }),
-    });
-
-    // 逐行读取 SSE 流
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-          const json = JSON.parse(line.slice(6));
-          const content = json.choices[0]?.delta?.content || '';
-          yield { content, done: false };
-        }
-      }
-    }
-
-    yield { content: '', done: true };
-  }
-
-  async embedding(text: string): Promise<number[]> {
-    const response = await fetch(`${this.config.baseUrl}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text,
-      }),
-    });
-
-    const data = await response.json();
-    return data.data[0].embedding;
-  }
-
-  async embeddingBatch(texts: string[]): Promise<number[][]> {
-    const response = await fetch(`${this.config.baseUrl}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: texts,
-      }),
-    });
-
-    const data = await response.json();
-    return data.data.map((item: any) => item.embedding);
-  }
-}
-```
-
-### 6.3 适配器工厂
-
-```typescript
-// packages/server/src/ai/factory.ts
-import type { LLMProvider, LLMConfig } from './types';
-import { OpenAIProvider } from './providers/openai';
-import { ZhipuProvider } from './providers/zhipu';
-import { QwenProvider } from './providers/qwen';
-import { DeepSeekProvider } from './providers/deepseek';
-
-type ProviderType = 'openai' | 'zhipu' | 'qwen' | 'deepseek';
-
-const providerMap: Record<ProviderType, new (config: LLMConfig) => LLMProvider> = {
-  openai: OpenAIProvider,
-  zhipu: ZhipuProvider,
-  qwen: QwenProvider,
-  deepseek: DeepSeekProvider,
-};
-
-export function createLLMProvider(provider: ProviderType, config: LLMConfig): LLMProvider {
-  const ProviderClass = providerMap[provider];
-  if (!ProviderClass) {
-    throw new Error(`不支持的 AI 厂商: ${provider}`);
-  }
-  return new ProviderClass(config);
-}
-```
-
-> **说明：** DeepSeek 和通义千问的 API 格式兼容 OpenAI，可继承 OpenAIProvider 仅修改 baseUrl 和 embedding 模型。智谱 AI 的接口略有差异，需单独实现。
-
----
-
-## 7. RAG 流程设计
-
-### 7.1 整体流程
-
-```
-【知识库构建流程】
-文章写入/更新 → 文本分块(Chunking) → 生成 Embedding → 存入 sqlite-vss 向量索引
-
-【RAG 知识问答流程】
-用户提问
-  → Embedding 用户问题
-  → 向量相似度检索（sqlite-vss）
-  → 取 Top-K 相关片段
-  → 构造 Prompt（系统提示 + 检索上下文 + 对话历史 + 用户问题）
-  → 调用大模型流式生成
-  → 返回答案 + 引用来源
-  → 持久化对话记录
-```
-
-### 7.2 文本分块策略
-
-```typescript
-// packages/server/src/rag/chunker.ts
-
-interface ChunkOptions {
-  maxTokens: number;      // 每块最大 token 数，默认 512
-  overlap: number;        // 重叠 token 数，默认 50
-  separator: string[];    // 分隔符优先级
-}
-
-const defaultOptions: ChunkOptions = {
-  maxTokens: 512,
-  overlap: 50,
-  separator: ['\n## ', '\n### ', '\n\n', '\n', '。', '. '],
-};
-
-/**
- * 递归字符分割：按分隔符优先级切割文本
- * 优先在 Markdown 标题处分割，保持语义完整性
- */
-export function splitText(text: string, options: ChunkOptions = defaultOptions): string[] {
-  const chunks: string[] = [];
-  // 1. 去除 Markdown 元信息（frontmatter）
-  // 2. 按最高优先级分隔符切分
-  // 3. 如果单块超过 maxTokens，递归使用下一级分隔符
-  // 4. 相邻块之间保留 overlap 个 token 的重叠
-  return chunks;
-}
-```
-
-**分块规则：**
-- 最大块长度：512 tokens
-- 块间重叠：50 tokens（保证上下文连贯）
-- 按 Markdown 结构分割：优先在 `##`、`###` 标题处断开
-- 过短段落合并：少于 100 tokens 的段落与下一段合并
-
-### 7.3 向量生成
-
-**Embedding 模型选择：**
-
-| 厂商 | 模型 | 维度 | 说明 |
-|------|------|------|------|
-| OpenAI | text-embedding-3-small | 1536 | 性价比高，推荐默认使用 |
-| 智谱 AI | embedding-2 | 1024 | 中文优化 |
-| 通义千问 | text-embedding-v2 | 1536 | 中文效果好 |
-
-```typescript
-// packages/server/src/rag/embedding.ts
-import { createLLMProvider } from '../ai/factory';
-
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const provider = await getDefaultProvider(); // 获取默认 AI 模型的 provider
-  return provider.embedding(text);
-}
-
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  const provider = await getDefaultProvider();
-  return provider.embeddingBatch(texts);
-}
-```
-
-### 7.4 存储与检索流程
-
-```typescript
-// packages/server/src/rag/retriever.ts
-import Database from 'better-sqlite3';
-
-/**
- * 向 sqlite-vss 插入向量
- */
-export function insertChunkVector(db: Database.Database, chunkId: number, embedding: number[]) {
-  const stmt = db.prepare(`
-    INSERT INTO vss_post_chunks (rowid, embedding)
-    VALUES (?, ?)
-  `);
-  stmt.run(chunkId, JSON.stringify(embedding));
-}
-
-/**
- * 语义检索：根据查询向量找到最相似的文本块
- */
-export function searchSimilarChunks(
-  db: Database.Database,
-  queryEmbedding: number[],
-  topK: number = 5,
-  threshold: number = 0.7
-) {
-  const results = db.prepare(`
-    SELECT rowid, distance
-    FROM vss_post_chunks
-    WHERE vss_search(embedding, ?)
-    LIMIT ?
-  `).all(JSON.stringify(queryEmbedding), topK);
-
-  // 关联查询原始文本
-  return results
-    .filter((r: any) => (1 - r.distance) >= threshold)
-    .map((r: any) => {
-      const chunk = db.prepare(`
-        SELECT pc.*, p.title as post_title
-        FROM post_chunks pc
-        JOIN posts p ON pc.post_id = p.id
-        WHERE pc.id = ?
-      `).get(r.rowid);
-      return { ...chunk, score: 1 - r.distance };
-    });
-}
-```
-
-### 7.5 RAG 增强问答完整流程
-
-```typescript
-// packages/server/src/rag/index.ts
-
-/**
- * RAG 增强知识问答完整流程
- */
-export async function ragChat(
-  question: string,
-  conversationId?: number
-): Promise<{ stream: AsyncGenerator<StreamChunk>; references: Reference[] }> {
-  // 1. 生成用户问题的向量
-  const queryEmbedding = await generateEmbedding(question);
-
-  // 2. 向量相似度检索 Top-K 相关片段
-  const relevantChunks = searchSimilarChunks(db, queryEmbedding, 5, 0.7);
-
-  // 3. 构造引用来源信息
-  const references = relevantChunks.map(c => ({
-    postId: c.post_id,
-    postTitle: c.post_title,
-    chunkText: c.chunk_text,
-    score: c.score,
-  }));
-
-  // 4. 组装检索上下文
-  const context = relevantChunks
-    .map(c => `【${c.post_title}】\n${c.chunk_text}`)
-    .join('\n\n---\n\n');
-
-  // 5. 构建系统 Prompt
-  const systemPrompt = `你是一个基于个人知识库的智能助手。请根据以下知识库内容回答用户问题。
-如果知识库中没有相关信息，请如实告知并提供你所知道的通用性建议。
-回答时请标注引用来源，格式为 [来源: 博客标题]。
-
----知识库内容---
-${context}
----结束---`;
-
-  // 6. 获取对话历史（多轮对话支持）
-  const historyMessages = conversationId
-    ? await getConversationMessages(conversationId, 10) // 取最近 10 条
-    : [];
-
-  // 7. 组装完整消息列表
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    ...historyMessages,
-    { role: 'user', content: question },
-  ];
-
-  // 8. 调用大模型流式生成回答
-  const stream = provider.chatStream(messages);
-
-  return { stream, references };
-}
-```
-
----
-
-## 8. 前端架构设计
-
-### 8.1 路由设计
-
-```typescript
-// packages/client/src/router/index.ts
-import { createRouter, createWebHistory } from 'vue-router';
-
-const routes = [
-  {
-    path: '/',
-    component: () => import('../layouts/MainLayout.vue'),
-    children: [
-      { path: '', name: 'Home', component: () => import('../pages/Home.vue') },
-      { path: 'posts', name: 'PostList', component: () => import('../pages/PostList.vue') },
-      { path: 'posts/:id', name: 'PostDetail', component: () => import('../pages/PostDetail.vue') },
-      { path: 'posts/new', name: 'PostCreate', component: () => import('../pages/PostEdit.vue') },
-      { path: 'posts/:id/edit', name: 'PostEdit', component: () => import('../pages/PostEdit.vue') },
-      { path: 'categories', name: 'Categories', component: () => import('../pages/Categories.vue') },
-      { path: 'search', name: 'Search', component: () => import('../pages/Search.vue') },
-      { path: 'ai/chat', name: 'AIChat', component: () => import('../pages/AIChat.vue') },
-      { path: 'ai/chat/:id', name: 'AIChatDetail', component: () => import('../pages/AIChat.vue') },
-      { path: 'settings', name: 'Settings', component: () => import('../pages/Settings.vue') },
-    ],
-  },
-];
-
-export const router = createRouter({
-  history: createWebHistory(),
-  routes,
-});
-```
-
-### 8.2 状态管理（Pinia Stores）
-
-```typescript
-// packages/client/src/stores/post.ts
-import { defineStore } from 'pinia';
-import type { Post } from '@blog/shared';
-
-export const usePostStore = defineStore('post', () => {
-  const posts = ref<Post[]>([]);
-  const currentPost = ref<Post | null>(null);
-  const loading = ref(false);
-  const total = ref(0);
-
-  async function fetchPosts(params?: { page?: number; categoryId?: number }) { /* ... */ }
-  async function fetchPost(id: number) { /* ... */ }
-  async function createPost(data: Partial<Post>) { /* ... */ }
-  async function updatePost(id: number, data: Partial<Post>) { /* ... */ }
-  async function deletePost(id: number) { /* ... */ }
-
-  return { posts, currentPost, loading, total, fetchPosts, fetchPost, createPost, updatePost, deletePost };
-});
-```
-
-```typescript
-// packages/client/src/stores/ai.ts
-import { defineStore } from 'pinia';
-
-export const useAIStore = defineStore('ai', () => {
-  const models = ref([]);
-  const conversations = ref([]);        // 对话列表
-  const currentConversation = ref(null); // 当前对话详情（含消息）
-  const streaming = ref(false);
-
-  async function fetchModels() { /* ... */ }
-  async function fetchConversations() { /* 获取对话列表 */ }
-  async function fetchConversation(id: number) { /* 获取对话详情 */ }
-  async function sendMessage(question: string, conversationId?: number) { /* RAG 问答 */ }
-  async function deleteConversation(id: number) { /* 删除对话 */ }
-  async function summarizePosts(postIds: number[], type: string) { /* 博客总结 */ }
-
-  return {
-    models, conversations, currentConversation, streaming,
-    fetchModels, fetchConversations, fetchConversation,
-    sendMessage, deleteConversation, summarizePosts
-  };
-});
-```
-
-### 8.3 组件结构
-
-```
-components/
-├── common/
-│   ├── AppHeader.vue          # 顶部导航栏
-│   ├── AppSidebar.vue         # 侧边栏（分类导航）
-│   ├── Pagination.vue         # 分页组件
-│   ├── ConfirmDialog.vue      # 确认弹窗
-│   ├── TagInput.vue           # 标签输入
-│   └── Loading.vue            # 加载状态
-├── editor/
-│   ├── MarkdownEditor.vue     # Markdown 编辑器封装
-│   └── EditorToolbar.vue      # 编辑器工具栏（含 AI 按钮）
-├── post/
-│   ├── PostCard.vue           # 文章卡片
-│   ├── PostContent.vue        # 文章内容渲染
-│   └── PostMeta.vue           # 文章元信息（日期、分类、字数）
-└── ai/
-    ├── ChatPanel.vue          # AI 对话主面板（消息列表 + 输入框）
-    ├── ChatMessage.vue        # 单条对话消息（含引用来源展示）
-    ├── ChatSidebar.vue        # 对话列表侧边栏（历史对话列表）
-    ├── ReferenceList.vue      # 检索引用来源展示组件
-    ├── SummaryPanel.vue       # AI 摘要面板
-    └── ModelSelector.vue      # 模型选择器
-```
-
-### 8.4 页面布局
-
-```
-┌──────────────────────────────────────────────────┐
-│                  AppHeader (顶部导航)              │
-├────────────┬─────────────────────────────────────┤
-│            │                                     │
-│  Sidebar   │           Main Content              │
-│  (分类导航) │          (路由视图区域)              │
-│            │                                     │
-│            │                                     │
-│            │                                     │
-├────────────┴─────────────────────────────────────┤
-│                    (可选底部)                      │
-└──────────────────────────────────────────────────┘
-```
-
-- **响应式设计**：移动端侧边栏收起为抽屉式
-- **暗色模式**：支持 light/dark 主题切换（Tailwind CSS `dark:` 前缀）
-- **编辑器页面**：全屏布局，左编辑右预览
-
----
-
-## 9. 开发环境搭建
-
-### 9.1 环境要求
-
-| 工具 | 版本要求 | 说明 |
-|------|----------|------|
-| Node.js | >= 20.x | 推荐使用 LTS 版本 |
-| pnpm | >= 9.x | 包管理器 |
-| Git | >= 2.x | 版本管理 |
-
-### 9.2 初始化项目
-
-```bash
-# 1. 克隆/创建项目
-mkdir blog && cd blog
-git init
-
-# 2. 初始化根 package.json
-pnpm init
-
-# 3. 创建 pnpm workspace 配置
-# pnpm-workspace.yaml 内容:
-# packages:
-#   - 'packages/*'
-
-# 4. 创建子包
-mkdir -p packages/client packages/server packages/shared
-
-# 5. 安装全局依赖
-pnpm add -D typescript prettier eslint -w
-```
-
-### 9.3 安装和启动命令
-
-```bash
-# 安装所有依赖
-pnpm install
-
-# 启动前端开发服务器
-pnpm --filter @blog/client dev
-
-# 启动后端开发服务器
-pnpm --filter @blog/server dev
-
-# 同时启动前后端（根 package.json 中配置）
-pnpm dev
-
-# 构建生产版本
-pnpm build
-
-# 类型检查
-pnpm typecheck
-```
-
-### 9.4 根 package.json 脚本配置
-
-```json
-{
-  "name": "blog",
-  "private": true,
-  "scripts": {
-    "dev": "pnpm --parallel --filter @blog/client --filter @blog/server dev",
-    "build": "pnpm --filter @blog/shared build && pnpm --parallel --filter @blog/client --filter @blog/server build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "eslint packages/*/src --ext .ts,.vue",
-    "format": "prettier --write \"packages/*/src/**/*.{ts,vue,css}\""
-  }
-}
-```
-
-### 9.5 开发工作流
-
-1. **功能分支开发**：从 `main` 切出 `feat/xxx` 分支
-2. **前后端并行开发**：`pnpm dev` 同时启动前后端，前端 Vite 代理 API 请求到后端
-3. **共享类型优先**：新功能先在 `packages/shared` 定义类型接口
-4. **数据库变更**：通过 migration 脚本管理 schema 变更
-
-**Vite 代理配置：**
-
-```typescript
-// packages/client/vite.config.ts
-import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
-
-export default defineConfig({
-  plugins: [vue()],
-  server: {
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-    },
-  },
-});
-```
-
----
-
-## 10. 部署与迁移
-
-### 10.1 本地部署步骤
-
-```bash
-# 1. 安装依赖
-pnpm install
-
-# 2. 构建共享包
-pnpm --filter @blog/shared build
-
-# 3. 构建前端（产出 dist 目录）
-pnpm --filter @blog/client build
-
-# 4. 构建后端
-pnpm --filter @blog/server build
-
-# 5. 启动生产服务（后端同时托管前端静态文件）
-cd packages/server
-node dist/app.js
-```
-
-**生产模式后端配置：**
-
-```typescript
-// packages/server/src/app.ts（生产模式下）
-import serve from 'koa-static';
-import path from 'path';
-
-if (process.env.NODE_ENV === 'production') {
-  // 托管前端构建产物
-  app.use(serve(path.resolve(__dirname, '../../client/dist')));
-}
-```
-
-### 10.2 数据迁移方案
-
-#### JSON 导出/导入
-
-- **导出**：将所有业务数据序列化为 JSON 文件，附带版本号和时间戳
-- **导入**：支持合并（不覆盖已有）和覆盖两种策略
-- **注意**：API Key 等敏感信息不包含在导出数据中
-
-#### SQLite 文件迁移
-
-- 直接复制 `packages/server/data/blog.db` 文件即可完成数据迁移
-- 优点：完整保留所有数据，包括向量索引
-- 缺点：文件体积较大
-
-#### 迁移数据结构
-
-```typescript
-interface ExportData {
-  version: string;
-  exportedAt: string;
-  data: {
-    posts: Post[];
-    categories: Category[];
-    settings: Setting[];
-    conversations: Conversation[];       // 对话及消息记录
-    // aiModels 不导出 apiKey
-    aiModels: Omit<AIModel, 'apiKey'>[];
-  };
-}
-```
-
-### 10.3 环境变量
-
-```bash
-# .env（开发环境）
-NODE_ENV=development
-PORT=3001
-DATABASE_PATH=./data/blog.db
-
-# .env.production（生产环境）
-NODE_ENV=production
-PORT=3001
-DATABASE_PATH=./data/blog.db
-```
-
----
-
-## 附录：快速参考
-
-### 常用命令速查
-
-| 命令 | 说明 |
-|------|------|
-| `pnpm install` | 安装所有依赖 |
-| `pnpm dev` | 启动开发环境（前后端） |
-| `pnpm build` | 构建生产版本 |
-| `pnpm --filter @blog/server db:migrate` | 执行数据库迁移 |
-| `pnpm --filter @blog/server db:seed` | 填充测试数据 |
-| `pnpm typecheck` | 全量类型检查 |
-| `pnpm lint` | 代码检查 |
-| `pnpm format` | 代码格式化 |
-
-### 端口规划
-
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| 前端 Dev Server | 3000 | Vite 开发服务器 |
-| 后端 API Server | 3001 | Koa2 API 服务 |
+# 个人本地知识总结博客系统 — 技术开发文档
+
+## 1. 技术架构概览
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      客户端 (Browser)                     │
+│         Vue 3 + Vite + Tailwind CSS + Vue Router         │
+│              Pinia 状态管理 + Axios HTTP 客户端            │
+└────────────────────────┬────────────────────────────────┘
+                         │ HTTP REST API
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                   后端服务 (Koa2 + TS)                    │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────────────┐  │
+│  │ 路由层     │  │ 中间件层  │  │ 控制器层              │  │
+│  └───────────┘  └──────────┘  └──────────────────────┘  │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────────────┐  │
+│  │ 数据模型   │  │ AI 适配层 │  │ RAG 引擎             │  │
+│  └───────────┘  └──────────┘  └──────────────────────┘  │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                    数据层 (SQLite)                        │
+│  业务数据表 (posts / categories / ai_models)             │
+│  + 向量表 (post_chunks — embedding 以 JSON 列存储)      │
+│  余弦相似度在 JS 中计算，无需额外向量扩展                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**架构特点：**
+
+- **前后端分离**：前端 SPA 通过 RESTful API 与后端通信
+- **Monorepo 单仓库**：使用 pnpm workspace + concurrently 同时启动前后端
+- **全栈 TypeScript**：前后端统一使用 TypeScript
+- **轻量级存储**：SQLite 单文件数据库，零配置，便于本地部署与迁移
+- **AI 多厂商适配**：所有 AI 厂商统一使用 OpenAI 兼容适配器（OpenAIProvider），通过工厂模式灵活切换
+- **RAG 实现**：文本分块 → AI Embedding → 向量以 JSON 列存储 → JS 计算余弦相似度 → 三级降级策略
+
+---
+
+## 2. 项目目录结构
+
+```
+blog/
+├── docs/                          # 项目文档
+│   ├── PRD.md                     # 产品需求文档
+│   └── DEVELOPMENT.md             # 技术开发文档
+├── packages/
+│   ├── client/                    # 前端项目 (Vue 3 + Vite)
+│   │   ├── src/
+│   │   │   ├── api/               # API 请求封装
+│   │   │   │   ├── index.ts       # Axios 实例与拦截器
+│   │   │   │   ├── posts.ts       # 博客接口
+│   │   │   │   ├── categories.ts  # 分类接口
+│   │   │   │   ├── ai-models.ts   # AI 模型接口
+│   │   │   │   └── search.ts      # 搜索接口
+│   │   │   ├── components/
+│   │   │   │   ├── common/        # 基础 UI 组件
+│   │   │   │   │   ├── CategoryPicker.vue
+│   │   │   │   │   ├── CategoryTag.vue
+│   │   │   │   │   ├── ConfirmDialog.vue
+│   │   │   │   │   ├── Empty.vue
+│   │   │   │   │   ├── Icon.vue
+│   │   │   │   │   ├── Pagination.vue
+│   │   │   │   │   └── Toast.vue
+│   │   │   │   └── layout/        # 布局组件
+│   │   │   │       ├── AppHeader.vue
+│   │   │   │       ├── AppLayout.vue
+│   │   │   │       └── AppSidebar.vue
+│   │   │   ├── composables/       # 组合式函数
+│   │   │   │   └── useToast.ts
+│   │   │   ├── router/            # 路由配置
+│   │   │   │   └── index.ts
+│   │   │   ├── stores/            # Pinia 状态管理
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── posts.ts
+│   │   │   │   └── categories.ts
+│   │   │   ├── types/             # TypeScript 类型
+│   │   │   │   └── index.ts
+│   │   │   ├── utils/             # 工具函数
+│   │   │   │   └── colors.ts
+│   │   │   ├── views/             # 页面视图
+│   │   │   │   ├── Home.vue
+│   │   │   │   ├── PostList.vue
+│   │   │   │   ├── PostDetail.vue
+│   │   │   │   ├── PostEdit.vue
+│   │   │   │   ├── Categories.vue
+│   │   │   │   ├── Search.vue
+│   │   │   │   ├── AIChat.vue
+│   │   │   │   └── Settings.vue
+│   │   │   ├── style.css          # 全局样式
+│   │   │   ├── App.vue            # 根组件
+│   │   │   └── main.ts            # 入口文件
+│   │   ├── index.html
+│   │   ├── vite.config.ts
+│   │   ├── tailwind.config.ts
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   ├── server/                    # 后端项目 (Koa2 + TS)
+│   │   ├── src/
+│   │   │   ├── ai/                # AI 模块
+│   │   │   │   ├── providers/     # 适配器（仅 openai.ts，支持所有厂商）
+│   │   │   │   │   └── openai.ts
+│   │   │   │   ├── types.ts       # LLMProvider/LLMConfig 类型
+│   │   │   │   └── factory.ts     # 适配器工厂 + supportsEmbedding
+│   │   │   ├── controllers/       # 控制器
+│   │   │   │   ├── postController.ts
+│   │   │   │   ├── categoryController.ts
+│   │   │   │   ├── aiModelController.ts
+│   │   │   │   └── searchController.ts
+│   │   │   ├── database/          # 数据库层
+│   │   │   │   ├── index.ts       # 初始化 + 迁移 + 预设数据
+│   │   │   │   └── schema.ts      # 建表 SQL
+│   │   │   ├── middleware/        # Koa 中间件
+│   │   │   │   ├── errorHandler.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── models/            # 数据模型（SQL 查询封装）
+│   │   │   │   ├── postModel.ts
+│   │   │   │   ├── categoryModel.ts
+│   │   │   │   └── aiModelModel.ts
+│   │   │   ├── rag/               # RAG 引擎
+│   │   │   │   ├── chunker.ts     # 文本分块
+│   │   │   │   ├── embedding.ts   # Embedding 生成
+│   │   │   │   ├── retriever.ts   # 向量检索
+│   │   │   │   └── index.ts       # 流程编排
+│   │   │   ├── routes/            # 路由定义
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── posts.ts
+│   │   │   │   ├── categories.ts
+│   │   │   │   ├── ai-models.ts
+│   │   │   │   └── search.ts
+│   │   │   ├── app.ts             # Koa 应用配置
+│   │   │   └── index.ts           # 入口文件
+│   │   ├── data/                  # SQLite 数据库文件目录
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   └── shared/                    # 共享类型
+│       ├── src/
+│       │   └── index.ts
+│       ├── tsconfig.json
+│       └── package.json
+├── pnpm-workspace.yaml
+├── package.json
+├── .gitignore
+└── .prettierrc
+```
+
+---
+
+## 3. 技术栈详细说明
+
+### 前端
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Vue 3 | ^3.4 | 前端框架，使用 Composition API |
+| Vite | ^5.x | 构建工具，开发服务器 |
+| TypeScript | ^5.4 | 类型安全 |
+| Tailwind CSS | ^3.4 | 原子化 CSS 框架 |
+| Vue Router | ^4.3 | 前端路由 |
+| Pinia | ^2.1 | 状态管理 |
+| Axios | ^1.6 | HTTP 客户端 |
+
+### 后端
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Koa2 | ^2.15 | Web 框架 |
+| TypeScript | ^5.3 | 类型安全 |
+| better-sqlite3 | ^12.10 | SQLite 驱动（同步，高性能） |
+| koa-router | ^12.x | 路由中间件 |
+| koa-bodyparser | ^4.4 | 请求体解析 |
+| @koa/cors | ^5.x | 跨域中间件 |
+| tsx | ^4.7 | TS 直接执行（开发模式 + watch） |
+| @types/better-sqlite3 | ^7.6 | SQLite 类型定义 |
+| @types/koa-router | ^7.4 | Koa 路由类型 |
+
+### 工具链
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| pnpm | >=8.x | 包管理器 + workspace |
+| Node.js | >=18.x | 运行时 |
+| concurrently | ^10.0 | 并行启动前后端 |
+| Prettier | — | 代码格式化（.prettierrc 配置） |
+
+---
+
+## 4. 数据库设计
+
+### 4.1 业务表结构
+
+#### posts（文章表）
+
+```sql
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,                    -- 文章标题
+  content TEXT NOT NULL,                  -- Markdown 原始内容
+  category_id INTEGER,                   -- 关联分类（兼容旧数据）
+  summary TEXT,                          -- 内容摘要（自动截取前 200 字）
+  word_count INTEGER DEFAULT 0,           -- 字数统计
+  is_vectorized INTEGER DEFAULT 0,        -- 是否已向量化：0=未向量化, 1=已向量化
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (category_id) REFERENCES categories(id)
+);
+```
+
+> **说明：** 文章与分类通过 `post_categories` 关联表实现多对多关系。
+
+#### post_categories（文章-分类关联表）
+
+```sql
+CREATE TABLE post_categories (
+  post_id INTEGER NOT NULL,
+  category_id INTEGER NOT NULL,
+  PRIMARY KEY (post_id, category_id),
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+```
+
+#### categories（分类表）
+
+```sql
+CREATE TABLE categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,              -- 分类名称
+  color TEXT DEFAULT NULL,                -- 分类颜色（十六进制色值）
+  is_preset INTEGER DEFAULT 0,            -- 是否预设分类
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+#### ai_models（AI 模型配置表）
+
+```sql
+CREATE TABLE ai_models (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL,                 -- 厂商标识: openai/zhipu/qwen/deepseek
+  name TEXT NOT NULL,                     -- 模型显示名称
+  model_id TEXT NOT NULL,                 -- 模型 ID (如 gpt-4o, glm-4)
+  api_key TEXT NOT NULL,                  -- API Key
+  base_url TEXT DEFAULT '',               -- 自定义 API 地址
+  is_default INTEGER DEFAULT 0,           -- 是否为默认模型
+  is_enabled INTEGER DEFAULT 1,           -- 是否启用
+  config TEXT DEFAULT '{}',               -- 额外配置（JSON: temperature 等）
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+### 4.2 向量表结构
+
+```sql
+-- 文本块表：存储分块后的文本 + Embedding 向量
+CREATE TABLE post_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL,               -- 关联文章 ID
+  chunk_index INTEGER NOT NULL,           -- 块序号（从 0 开始）
+  chunk_text TEXT NOT NULL,               -- 块文本内容
+  embedding TEXT DEFAULT NULL,            -- 向量（JSON 格式，如 [0.001, 0.002, ...]）
+  token_count INTEGER DEFAULT 0,          -- 预估 token 数
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+```
+
+> **说明：** 向量以 JSON 数组直接存储在 `embedding` 字段中，检索时在 JS 中解析并计算余弦相似度，无需额外的向量数据库或扩展。向量维度由所选 Embedding 模型决定（如 text-embedding-3-small 为 1536 维）。
+
+### 4.3 索引设计
+
+```sql
+-- 文章-分类关联表索引（PRIMARY KEY 自带）
+CREATE INDEX idx_chunks_post ON post_chunks(post_id);
+```
+
+---
+
+## 5. RESTful API 接口设计
+
+### 5.1 通用响应格式
+
+```typescript
+// 成功响应
+interface ApiResponse<T> {
+  code: number;       // 状态码: 0=成功
+  data: T;            // 响应数据
+  message: string;    // 提示信息
+}
+
+// 分页响应
+interface PaginatedResponse<T> {
+  code: number;
+  data: {
+    list: T[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
+  message: string;
+}
+
+// 错误响应
+interface ErrorResponse {
+  code: number;       // 错误码: 非0
+  data: null;
+  message: string;    // 错误描述
+}
+```
+
+### 5.2 博客 CRUD 接口
+
+#### GET /api/posts — 获取文章列表
+
+```
+Query 参数:
+  page: number        (默认 1)
+  pageSize: number    (默认 20)
+  categoryId?: number
+
+响应示例:
+{
+  "code": 0,
+  "data": {
+    "list": [
+      {
+        "id": 1,
+        "title": "Vue 3 组合式 API 入门",
+        "categories": [{"id": 2, "name": "前端", "color": "#3b82f6"}],
+        "summary": "本文介绍 Vue 3 Composition API...",
+        "word_count": 3200,
+        "is_vectorized": 1,
+        "created_at": "2026-06-07 10:30:00",
+        "updated_at": "2026-06-07 10:30:00"
+      }
+    ],
+    "total": 42,
+    "page": 1,
+    "pageSize": 20
+  },
+  "message": "ok"
+}
+```
+
+#### GET /api/posts/:id — 获取文章详情
+
+```
+响应示例:
+{
+  "code": 0,
+  "data": {
+    "id": 1,
+    "title": "Vue 3 组合式 API 入门",
+    "content": "# Vue 3 组合式 API...",
+    "categories": [{"id": 2, "name": "前端", "color": "#3b82f6"}],
+    "word_count": 3200,
+    "is_vectorized": 1,
+    "created_at": "2026-06-07 10:30:00",
+    "updated_at": "2026-06-07 10:30:00"
+  },
+  "message": "ok"
+}
+```
+
+#### POST /api/posts — 创建文章
+
+```
+请求体:
+{
+  "title": "新文章标题",
+  "content": "# Markdown 内容...",
+  "categoryIds": [2]
+}
+
+响应示例:
+{
+  "code": 0,
+  "data": { "id": 43 },
+  "message": "创建成功"
+}
+```
+
+> **说明：** 创建成功后，后端异步触发向量索引（`indexPost`），不阻塞响应。
+
+#### PUT /api/posts/:id — 更新文章
+
+```
+请求体:
+{
+  "title": "更新后的标题",         // 可选
+  "content": "# 更新后的内容...",   // 可选
+  "categoryIds": [3]               // 可选
+}
+
+响应示例:
+{
+  "code": 0,
+  "data": { ...post },
+  "message": "更新成功"
+}
+```
+
+> **说明：** 如果内容或标题改变，后端异步触发重新索引。
+
+#### DELETE /api/posts/:id — 删除文章
+
+```
+响应示例:
+{
+  "code": 0,
+  "data": null,
+  "message": "删除成功"
+}
+```
+
+> **说明：** 删除时同步清理 `post_chunks` 中的分块数据（ON DELETE CASCADE）。
+
+### 5.3 分类接口
+
+#### GET /api/categories — 获取所有分类
+
+```
+响应示例:
+{
+  "code": 0,
+  "data": [
+    {
+      "id": 1, "name": "前端", "color": "#3b82f6", "is_preset": 1,
+      "post_count": 15, "created_at": "...", "updated_at": "..."
+    },
+    {
+      "id": 2, "name": "后端", "color": "#10b981", "is_preset": 1,
+      "post_count": 8, "created_at": "...", "updated_at": "..."
+    }
+  ],
+  "message": "ok"
+}
+```
+
+#### POST /api/categories — 创建分类
+
+```
+请求体:
+{ "name": "数据库", "color": "#f59e0b" }    // color 可选
+
+响应示例:
+{ "code": 0, "data": { "id": 11 }, "message": "创建成功" }
+```
+
+#### PUT /api/categories/:id — 更新分类
+
+```
+请求体:
+{ "name": "数据库技术", "color": "#ef4444" }
+
+响应示例:
+{ "code": 0, "data": null, "message": "更新成功" }
+```
+
+#### DELETE /api/categories/:id — 删除分类
+
+```
+响应示例:
+{ "code": 0, "data": null, "message": "删除成功" }
+```
+
+### 5.4 AI 模型管理接口
+
+#### GET /api/ai-models — 获取所有 AI 模型配置
+
+```
+响应示例:
+{
+  "code": 0,
+  "data": [
+    {
+      "id": 1,
+      "provider": "openai",
+      "name": "GPT-4o",
+      "model_id": "gpt-4o",
+      "api_key": "sk-xxx",      // 仅编辑时返回
+      "base_url": "https://api.openai.com/v1",
+      "is_default": 1,
+      "is_enabled": 1,
+      "config": {},
+      "supportsEmbedding": true
+    }
+  ],
+  "message": "ok"
+}
+```
+
+#### POST /api/ai-models — 添加 AI 模型
+
+```
+请求体:
+{
+  "provider": "zhipu",
+  "name": "GLM-4",
+  "modelId": "glm-4",
+  "apiKey": "your-api-key-here",
+  "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+  "isDefault": false
+}
+
+响应示例:
+{ "code": 0, "data": { "id": 3 }, "message": "创建成功" }
+```
+
+#### PUT /api/ai-models/:id — 更新 AI 模型配置
+
+```
+请求体:
+{
+  "name": "GLM-4 Plus",
+  "modelId": "glm-4-plus",
+  "apiKey": "new-api-key",
+  "baseUrl": "...",
+  "isDefault": true
+}
+
+响应示例:
+{ "code": 0, "data": null, "message": "更新成功" }
+```
+
+#### DELETE /api/ai-models/:id — 删除 AI 模型
+
+```
+响应示例:
+{ "code": 0, "data": null, "message": "删除成功" }
+```
+
+#### POST /api/ai-models/:id/test — 测试模型连接
+
+```
+请求体: 空
+
+响应示例:
+{ "code": 0, "data": "连接成功！回复: 连接成功", "message": "ok" }
+```
+
+### 5.5 RAG 搜索接口
+
+#### POST /api/search — 语义搜索
+
+```
+请求体:
+{
+  "query": "Vue 响应式原理是什么",
+  "topK": 5,              // 可选，默认 5
+  "threshold": 0.0        // 可选，相似度阈值
+}
+
+响应示例:
+{
+  "code": 0,
+  "data": {
+    "results": [
+      {
+        "postId": 1,
+        "postTitle": "Vue 3 响应式系统详解",
+        "chunkId": 5,
+        "chunkText": "Vue 3 使用 Proxy 实现响应式...",
+        "chunkIndex": 0,
+        "score": 0.92
+      }
+    ],
+    "hasVectorData": true,
+    "isFallback": false
+  },
+  "message": "success"
+}
+```
+
+**搜索降级策略：**
+1. 有向量数据 → 余弦相似度语义搜索
+2. 有分块无向量 → `chunk_text LIKE` 关键词匹配
+3. 从未索引 → `title LIKE` 标题搜索
+
+#### POST /api/search/reindex — 全量重建向量索引
+
+```
+请求体: 空
+
+响应示例:
+{
+  "code": 0,
+  "message": "索引重建完成: 5 篇文章",
+  "data": {
+    "total": 5,
+    "succeeded": 5,
+    "failed": 0,
+    "vectorized": 3,
+    "chunked": 2,
+    "errors": [],
+    "hasEmbeddingModel": true,
+    "tip": "模型已识别但 Embedding API 调用失败..."
+  }
+}
+```
+
+#### POST /api/search/index/:postId — 单篇重建索引
+
+```
+响应示例:
+{
+  "code": 0,
+  "message": "索引完成",
+  "data": {
+    "success": true,
+    "chunks": 5,
+    "vectorized": true
+  }
+}
+```
+
+---
+
+## 6. AI 模块设计
+
+### 6.1 适配器模式架构
+
+所有 AI 厂商统一使用 OpenAI 兼容适配器（`OpenAIProvider`），无需为各厂商单独实现 Provider。
+
+```typescript
+// packages/server/src/ai/types.ts
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface LLMConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  provider?: string;        // 厂商类型
+  embeddingModel?: string;  // 指定 Embedding 模型名
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface LLMProvider {
+  chat(messages: ChatMessage[], config?: Partial<LLMConfig>): Promise<ChatResult>;
+  chatStream(messages: ChatMessage[], config?: Partial<LLMConfig>): AsyncGenerator<StreamChunk>;
+  embedding(text: string): Promise<number[]>;
+  embeddingBatch(texts: string[]): Promise<number[][]>;
+}
+
+export interface ChatResult {
+  content: string;
+  tokensUsed: { prompt: number; completion: number; total: number };
+}
+```
+
+### 6.2 适配器工厂
+
+```typescript
+// packages/server/src/ai/factory.ts
+import { OpenAIProvider } from './providers/openai';
+
+export type ProviderType = 'openai' | 'zhipu' | 'qwen' | 'deepseek';
+
+// 所有厂商统一使用 OpenAI 兼容适配器
+const providerMap: Record<ProviderType, new (config: LLMConfig) => LLMProvider> = {
+  openai: OpenAIProvider,
+  zhipu: OpenAIProvider,
+  qwen: OpenAIProvider,
+  deepseek: OpenAIProvider,
+};
+
+// 各厂商默认 Base URL 和 Embedding 模型
+const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
+  openai: 'https://api.openai.com/v1',
+  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  deepseek: 'https://api.deepseek.com',
+};
+
+// 支持 Embedding 的厂商
+const EMBEDDING_ENABLED_PROVIDERS: ProviderType[] = ['openai', 'zhipu', 'qwen'];
+export function supportsEmbedding(provider: string): boolean {
+  return EMBEDDING_ENABLED_PROVIDERS.includes(provider as ProviderType);
+}
+```
+
+### 6.3 Embedding URL 构建
+
+不同厂商的 baseUrl 版本号不同，通过正则自动适配：
+
+```typescript
+private getEmbeddingUrl(baseUrl: string): string {
+  if (/\/v\d+$/.test(baseUrl)) {
+    return `${baseUrl}/embeddings`;
+  }
+  return `${baseUrl}/v1/embeddings`;
+}
+// 示例:
+//   https://api.openai.com/v1              → /v1/embeddings
+//   https://open.bigmodel.cn/api/paas/v4    → /v4/embeddings
+//   https://api.deepseek.com                → /v1/embeddings
+```
+
+Embedding 模型自动选择：优先使用用户配置的聊天模型（如包含 "embedding"），否则使用厂商默认的 Embedding 模型。
+
+### 6.4 厂商 Embedding 支持一览
+
+| 厂商 | ProviderType | 支持 Embedding | 默认 Embedding 模型 | 说明 |
+|------|-------------|:------------:|-------------------|------|
+| OpenAI | `openai` | ✅ | `text-embedding-3-small` (1536维) | 推荐，费用极低 |
+| 智谱AI | `zhipu` | ✅ | `embedding-2` (1024维) | 中文优化 |
+| 通义千问 | `qwen` | ✅ | `text-embedding-v2` (1536维) | 有免费额度 |
+| DeepSeek | `deepseek` | ❌ | — | 无 Embedding API |
+
+---
+
+## 7. RAG 流程设计
+
+### 7.1 整体流程
+
+```
+【索引构建流程 — 写入】
+创建/更新文章 → postController 异步调用 indexPost()
+  → 清空旧分块
+  → chunker.splitText() — 按 Markdown 结构分块
+  → embedding.generateEmbeddings() — AI 模型批量向量化（失败则记录错误，继续分块存储）
+  → 存储到 post_chunks 表（文本 + 向量 JSON）
+  → 标记 posts.is_vectorized = 1
+
+【语义搜索流程 — 读取】
+用户输入查询 → semanticSearch()
+  第 1 级: 有向量 → 生成查询向量 → 余弦相似度检索
+  第 2 级: 无向量 → chunk_text LIKE 关键词匹配
+  第 3 级: 无分块 → title LIKE 标题搜索
+```
+
+### 7.2 文本分块 — chunker.ts
+
+```typescript
+// 分隔符优先级
+separator: ['\n## ', '\n### ', '\n\n', '\n', '。', '. ']
+// 参数
+maxTokens: 512    // 每块最大 token 数
+overlap: 50       // 相邻块重叠 token 数
+```
+
+**处理步骤：**
+1. `stripMetadata()` — 去除 YAML frontmatter
+2. `splitBySeparator()` — 按最高优先级分隔符递归切分
+3. `mergeShortChunks()` — 合并过短片段
+4. `addOverlap()` — 超过 80% 阈值的块添加重叠
+5. `estimateTokens()` — 中英混合估算（中文≈1.5字符/token，英文≈4字符/token）
+
+### 7.3 Embedding 生成 — embedding.ts
+
+**Provider 自动发现：** 遍历所有已启用模型，按 `is_default DESC` 排序，用 `supportsEmbedding()` 过滤，找到第一个可用的。若无可用模型返回 `null`（触发降级）。
+
+```typescript
+export async function generateEmbeddings(texts: string[]): Promise<number[][] | null> {
+  const provider = getAvailableProvider();  // 只查找支持 Embedding 的模型
+  if (!provider) return null;
+  return await provider.embeddingBatch(texts);  // 不 catch，让 indexPost 处理错误
+}
+```
+
+### 7.4 向量检索 — retriever.ts
+
+在 JS 中计算余弦相似度，无需额外的向量数据库：
+
+```typescript
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dotProduct = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+```
+
+检索步骤：查询所有有向量的块 → 解析 JSON 向量 → 计算余弦相似度 → 排序取 Top-K。
+
+### 7.5 索引编排 — index.ts
+
+**`indexPost(postId)`：** 清旧块 → 分块 → 批量向量化（可能失败）→ 存储 → 标记。返回 `{ success, chunks, vectorized, error? }`。
+
+**`reindexAll()`：** 遍历所有文章 → 逐篇 `indexPost` → 收集统计。返回 `{ total, vectorized, chunked, errors[] }`。
+
+**`semanticSearch(query)`：** 三级降级搜索，返回 `{ results, hasVectorData, isFallback }`。
+
+### 7.6 自动向量化触发
+
+在 [postController.ts](e:\project\blog\packages\server\src\controllers\postController.ts) 中：
+- **创建文章后**（第 86 行）：`indexPost(result.id).catch(...)` — 异步，不阻塞响应
+- **更新文章后**（第 139 行）：内容/标题改变时 `indexPost(id).catch(...)`
+- **删除文章时**（第 146 行）：`deletePostChunks(postId)` — 同步清理
+
+### 7.7 错误传播设计
+
+系统设计了三层错误传播机制，确保问题不会静默吞没：
+1. `generateEmbeddings()` — API 错误直接 throw，不 catch
+2. `indexPost()` — catch 错误并以 `{ vectorized: false, error }` 返回
+3. `reindexAll()` — 收集所有错误到 `errors[]` 数组
+4. 前端收到详细统计后，通过 Toast 显示具体失败原因（API Key 错误 / 余额不足 / 模型不支持等）
+
+---
+
+## 8. 前端架构设计
+
+### 8.1 路由设计
+
+```typescript
+// packages/client/src/router/index.ts
+import { createRouter, createWebHistory } from 'vue-router'
+import AppLayout from '@/components/layout/AppLayout.vue'
+
+const routes = [
+  {
+    path: '/',
+    component: AppLayout,
+    children: [
+      { path: '', name: 'Home', component: () => import('@/views/Home.vue') },
+      { path: 'posts', name: 'PostList', component: () => import('@/views/PostList.vue') },
+      { path: 'post/new', name: 'PostCreate', component: () => import('@/views/PostEdit.vue') },
+      { path: 'post/edit/:id', name: 'PostEdit', component: () => import('@/views/PostEdit.vue') },
+      { path: 'post/:id', name: 'PostDetail', component: () => import('@/views/PostDetail.vue') },
+      { path: 'categories', name: 'Categories', component: () => import('@/views/Categories.vue') },
+      { path: 'search', name: 'Search', component: () => import('@/views/Search.vue') },
+      { path: 'ai', name: 'AIChat', component: () => import('@/views/AIChat.vue') },
+      { path: 'settings', name: 'Settings', component: () => import('@/views/Settings.vue') },
+    ]
+  }
+]
+
+export default router
+```
+
+### 8.2 状态管理（Pinia Stores）
+
+实际仅包含两个 Store（位于 `packages/client/src/stores/`）：
+- **posts.ts** — 文章 CRUD 与列表管理（含分页、分类筛选）
+- **categories.ts** — 分类列表与选中状态
+
+> 没有 AI Store，AI 模型配置直接在 Settings 页面中通过 API 调用管理。
+
+```typescript
+// packages/client/src/stores/posts.ts
+import { defineStore } from 'pinia';
+
+// 实际实现包含: posts, currentPost, loading, total,
+// fetchPosts, fetchPost, createPost, updatePost, deletePost
+```
+
+### 8.3 组件结构
+
+```
+components/
+├── common/                    # 基础 UI 组件
+│   ├── CategoryPicker.vue     # 分类选择器
+│   ├── CategoryTag.vue        # 分类标签
+│   ├── ConfirmDialog.vue      # 确认弹窗
+│   ├── Empty.vue              # 空状态占位
+│   ├── Icon.vue               # SVG 图标
+│   ├── Pagination.vue         # 分页组件
+│   └── Toast.vue              # 消息提示
+└── layout/                    # 布局组件
+    ├── AppHeader.vue          # 顶部导航栏
+    ├── AppLayout.vue          # 整体布局容器
+    └── AppSidebar.vue         # 侧边栏（分类导航）
+```
+
+> 没有独立的 editor/、post/、ai/ 组件目录，相关 UI 直接在视图文件中实现。
+
+### 8.4 页面布局
+
+```
+┌──────────────────────────────────────────────────┐
+│                  AppHeader (顶部导航)              │
+├────────────┬─────────────────────────────────────┤
+│            │                                     │
+│  Sidebar   │           Main Content              │
+│  (分类导航) │          (路由视图区域)              │
+│            │                                     │
+│            │                                     │
+│            │                                     │
+├────────────┴─────────────────────────────────────┤
+│                    (可选底部)                      │
+└──────────────────────────────────────────────────┘
+```
+
+- **响应式设计**：移动端侧边栏收起为抽屉式
+- **暗色模式**：支持 light/dark 主题切换（Tailwind CSS `dark:` 前缀）
+- **编辑器页面**：全屏布局，左编辑右预览
+
+---
+
+## 9. 开发环境搭建
+
+### 9.1 环境要求
+
+| 工具 | 版本要求 | 说明 |
+|------|----------|------|
+| Node.js | >= 20.x | 推荐使用 LTS 版本 |
+| pnpm | >= 9.x | 包管理器 |
+| Git | >= 2.x | 版本管理 |
+
+### 9.2 初始化项目
+
+```bash
+# 1. 克隆/创建项目
+mkdir blog && cd blog
+git init
+
+# 2. 初始化根 package.json
+pnpm init
+
+# 3. 创建 pnpm workspace 配置
+# pnpm-workspace.yaml 内容:
+# packages:
+#   - 'packages/*'
+
+# 4. 创建子包
+mkdir -p packages/client packages/server packages/shared
+
+# 5. 安装全局依赖
+pnpm add -D typescript prettier -w
+```
+
+### 9.3 安装和启动命令
+
+```bash
+# 安装所有依赖
+pnpm install
+
+# 启动前端开发服务器
+pnpm --filter @knowledge-blog/client dev
+
+# 启动后端开发服务器
+pnpm --filter @knowledge-blog/server dev
+
+# 同时启动前后端（根 package.json 中配置）
+pnpm dev
+
+# 构建生产版本
+pnpm build
+
+# 类型检查
+pnpm typecheck
+```
+
+### 9.4 根 package.json 脚本配置
+
+```json
+{
+  "name": "knowledge-blog",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @knowledge-blog/server dev\" \"pnpm --filter @knowledge-blog/client dev\"",
+    "build": "pnpm --filter @knowledge-blog/server build && pnpm --filter @knowledge-blog/client build",
+    "start": "pnpm --filter @knowledge-blog/server start"
+  }
+}
+```
+
+### 9.5 开发工作流
+
+1. **功能分支开发**：从 `main` 切出 `feat/xxx` 分支
+2. **前后端并行开发**：`pnpm dev` 同时启动前后端（通过 `concurrently`），前端 Vite 代理 API 请求到后端
+3. **数据库变更**：数据库 schema 在 `packages/server/src/database/schema.ts` 中集中管理，修改后需删除旧 `.db` 文件或手动重建
+
+**Vite 代理配置：**
+
+```typescript
+// packages/client/vite.config.ts
+import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+import { resolve } from 'path';
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
+});
+```
+
+---
+
+## 10. 部署与迁移
+
+### 10.1 本地部署步骤
+
+```bash
+# 1. 安装依赖
+pnpm install
+
+# 2. 构建后端
+pnpm --filter @knowledge-blog/server build
+
+# 3. 构建前端
+pnpm --filter @knowledge-blog/client build
+
+# 4. 启动生产服务
+pnpm start
+```
+
+> 生产模式下后端运行在 `http://localhost:3000`，前端构建产物位于 `packages/client/dist`，需通过 Nginx 或类似工具托管并代理 `/api` 请求到后端。
+
+### 10.2 数据迁移方案
+
+#### JSON 导出/导入
+
+- **导出**：将所有业务数据序列化为 JSON 文件，附带版本号和时间戳
+- **导入**：支持合并（不覆盖已有）和覆盖两种策略
+- **注意**：API Key 等敏感信息不包含在导出数据中
+
+#### SQLite 文件迁移
+
+- 直接复制 `packages/server/data/blog.db` 文件即可完成数据迁移
+- 优点：完整保留所有数据，包括向量 Embedding
+- 缺点：文件体积较大
+
+#### 迁移数据结构
+
+```typescript
+interface ExportData {
+  version: string;
+  exportedAt: string;
+  data: {
+    posts: Post[];
+    categories: Category[];
+    // aiModels 不导出 apiKey
+    aiModels: Omit<AIModel, 'apiKey'>[];
+  };
+}
+```
+
+### 10.3 环境变量
+
+```bash
+# .env（开发环境）
+NODE_ENV=development
+PORT=3000
+DATABASE_PATH=./data/blog.db
+
+# .env.production（生产环境）
+NODE_ENV=production
+PORT=3000
+DATABASE_PATH=./data/blog.db
+```
+
+---
+
+## 附录：快速参考
+
+### 常用命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `pnpm install` | 安装所有依赖 |
+| `pnpm dev` | 启动开发环境（前后端同时） |
+| `pnpm build` | 构建生产版本 |
+| `pnpm start` | 启动生产服务 |
+
+### 端口规划
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 前端 Dev Server | 5173 | Vite 开发服务器 |
+| 后端 API Server | 3000 | Koa2 API 服务 |
